@@ -1,0 +1,35 @@
+{
+  "name": "fireorm",
+  "version": "0.1.0",
+  "description": "Um ORM elegante e tipado para Firebird",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "firebird",
+    "orm",
+    "database",
+    "typescript",
+    "node-firebird"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "node-firebird": "^1.1.5",
+    "reflect-metadata": "^0.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "@types/jest": "^29.5.12",
+    "typescript": "^5.3.3",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2"
+  },
+  "peerDependencies": {
+    "typescript": ">=4.5.0"
+  }
+} 
