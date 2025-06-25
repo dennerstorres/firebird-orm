@@ -1,4 +1,5 @@
 import { ENTITY_METADATA_KEY, COLUMN_METADATA_KEY, PRIMARY_COLUMN_METADATA_KEY } from './decorators';
+import { FindOptions } from './types';
 
 export class Repository<T> {
   private pool: any;
@@ -20,15 +21,64 @@ export class Repository<T> {
     return column?.name || propertyKey.toString();
   }
 
+  private async getNextId(): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const tableName = this.metadata.name;
+      const sql = `SELECT GEN_ID(GEN_${tableName}_ID, 1) AS ID FROM RDB$DATABASE`;
+
+      this.pool.get((err: Error, db: any) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        db.query(sql, [], (err: Error, result: any[]) => {
+          db.detach();
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve(result[0].ID);
+        });
+      });
+    });
+  }
+
+  private buildWhereClause(where: Partial<T>): { sql: string; params: any[] } {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    
+    Object.entries(where).forEach(([key, value]) => {
+      const columnName = this.getColumnName(key);
+      conditions.push(`${columnName} = ?`);
+      params.push(value);
+    });
+
+    return {
+      sql: conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '',
+      params
+    };
+  }
+
+  private buildOrderByClause(orderBy: { [K in keyof T]?: 'ASC' | 'DESC' }): string {
+    const orders: string[] = [];
+    
+    Object.entries(orderBy).forEach(([key, direction]) => {
+      const columnName = this.getColumnName(key);
+      orders.push(`${columnName} ${direction}`);
+    });
+
+    return orders.length > 0 ? `ORDER BY ${orders.join(', ')}` : '';
+  }
+
   private mapResultToEntity(result: any): T {
     const entity = new this.entity();
     const columns = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
     const primaryColumns = Reflect.getMetadata(PRIMARY_COLUMN_METADATA_KEY, this.entity) || [];
     
     const allColumns = [...columns, ...primaryColumns];
-
+    
     allColumns.forEach(column => {
-      // Verifica se a coluna existe no resultado (case insensitive)
       const columnName = column.name.toLowerCase();
       const resultKey = Object.keys(result).find(key => key.toLowerCase() === columnName);
       
@@ -52,7 +102,6 @@ export class Repository<T> {
       const tableName = this.metadata.name;
       const sql = `SELECT * FROM ${tableName} WHERE ${primaryColumn.name} = ?`;
 
-
       this.pool.get((err: Error, db: any) => {
         if (err) {
           reject(err);
@@ -69,18 +118,27 @@ export class Repository<T> {
             resolve(null);
             return;
           }
-          const mappedEntity = this.mapResultToEntity(result[0]);
-          resolve(mappedEntity);
+          resolve(this.mapResultToEntity(result[0]));
         });
       });
     });
   }
 
-  async find(): Promise<T[]> {
+  async find(options?: FindOptions<T>): Promise<T[]> {
     return new Promise((resolve, reject) => {
       const tableName = this.metadata.name;
-      const sql = `SELECT * FROM ${tableName}`;
+      const whereClause = options?.where ? this.buildWhereClause(options.where) : { sql: '', params: [] };
+      const orderByClause = options?.orderBy ? this.buildOrderByClause(options.orderBy) : '';
+      const limitClause = options?.limit ? `ROWS ${options.limit}` : '';
+      const offsetClause = options?.offset ? `OFFSET ${options.offset}` : '';
 
+      const sql = `
+        SELECT * FROM ${tableName}
+        ${whereClause.sql}
+        ${orderByClause}
+        ${limitClause}
+        ${offsetClause}
+      `.trim().replace(/\s+/g, ' ');
 
       this.pool.get((err: Error, db: any) => {
         if (err) {
@@ -88,7 +146,7 @@ export class Repository<T> {
           return;
         }
 
-        db.query(sql, [], (err: Error, result: any[]) => {
+        db.query(sql, whereClause.params, (err: Error, result: any[]) => {
           db.detach();
           if (err) {
             reject(err);
@@ -98,47 +156,53 @@ export class Repository<T> {
             resolve([]);
             return;
           }
-          const mappedEntities = result.map(row => {
-            const entity = this.mapResultToEntity(row);
-            return entity;
-          });
-          resolve(mappedEntities);
+          resolve(result.map(row => this.mapResultToEntity(row)));
         });
       });
     });
   }
 
   async save(entity: Partial<T>): Promise<T> {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       const columns = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
       const primaryColumns = Reflect.getMetadata(PRIMARY_COLUMN_METADATA_KEY, this.entity) || [];
       const tableName = this.metadata.name;
-      
-      const columnNames = columns.map((col: any) => col.name).join(', ');
-      const placeholders = columns.map(() => '?').join(', ');
-      const values = columns.map((col: any) => (entity as any)[col.propertyKey]);
 
-      const sql = `INSERT INTO ${tableName} (${columnNames}) VALUES (${placeholders})`;
-
-      this.pool.get((err: Error, db: any) => {
-        if (err) {
-          reject(err);
-          return;
+      try {
+        // Se não tem ID e tem coluna primária, gera o próximo ID
+        if (primaryColumns.length) {
+          const primaryColumn = primaryColumns[0];
+          const id = (entity as any)[primaryColumn.propertyKey];
+          
+          if (!id) {
+            const nextId = await this.getNextId();
+            (entity as any)[primaryColumn.propertyKey] = nextId;
+          }
         }
+        
+        const columnNames = columns.map((col: any) => col.name).join(', ');
+        const placeholders = columns.map(() => '?').join(', ');
+        const values = columns.map((col: any) => (entity as any)[col.propertyKey]);
 
-        db.query(sql, values, (err: Error, result: any) => {
-          db.detach();
+        const sql = `INSERT INTO ${tableName} (${columnNames}) VALUES (${placeholders})`;
+
+        this.pool.get((err: Error, db: any) => {
           if (err) {
             reject(err);
             return;
           }
 
-          if (primaryColumns.length) {
-            const primaryColumn = primaryColumns[0];
-            const id = (entity as any)[primaryColumn.propertyKey];
-            
-            if (id) {
-              // Se já tem ID, busca o registro
+          db.query(sql, values, (err: Error) => {
+            db.detach();
+            if (err) {
+              reject(err);
+              return;
+            }
+
+            if (primaryColumns.length) {
+              const primaryColumn = primaryColumns[0];
+              const id = (entity as any)[primaryColumn.propertyKey];
+              
               this.findOne(id)
                 .then(savedEntity => {
                   if (!savedEntity) {
@@ -149,30 +213,13 @@ export class Repository<T> {
                 })
                 .catch(reject);
             } else {
-              // Se não tem ID, busca o último registro inserido
-              const lastIdSql = `SELECT GEN_ID(GEN_${tableName}_ID, 0) AS ID FROM RDB$DATABASE`;
-              db.query(lastIdSql, [], (err: Error, result: any[]) => {
-                if (err) {
-                  reject(err);
-                  return;
-                }
-                const lastId = result[0].ID;
-                this.findOne(lastId)
-                  .then(savedEntity => {
-                    if (!savedEntity) {
-                      reject(new Error('Failed to save entity'));
-                      return;
-                    }
-                    resolve(savedEntity);
-                  })
-                  .catch(reject);
-              });
+              resolve(this.mapResultToEntity(entity));
             }
-          } else {
-            resolve(this.mapResultToEntity(entity));
-          }
+          });
         });
-      });
+      } catch (error) {
+        reject(error);
+      }
     });
   }
 

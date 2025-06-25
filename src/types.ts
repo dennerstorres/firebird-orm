@@ -15,6 +15,15 @@ export interface ColumnMetadata {
   isGenerated?: boolean;
 }
 
+export interface FindOptions<T> {
+  where?: Partial<T>;
+  orderBy?: {
+    [K in keyof T]?: 'ASC' | 'DESC';
+  };
+  limit?: number;
+  offset?: number;
+}
+
 export interface QueryBuilder<T> {
   where(condition: Partial<T>): QueryBuilder<T>;
   orderBy(property: keyof T, direction?: 'ASC' | 'DESC'): QueryBuilder<T>;

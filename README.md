@@ -1,4 +1,4 @@
-# FireORM
+# Firebird-ORM
 
 Um ORM (Object-Relational Mapping) elegante e tipado para Firebird, desenvolvido em TypeScript.
 
@@ -84,6 +84,32 @@ console.log(usuario.nome); // "João Silva"
 // Buscando todos os usuários
 const usuarios = await usuarioRepository.find();
 console.log(usuarios.length); // Número total de usuários
+
+// Buscando com filtros
+const usuariosFiltrados = await usuarioRepository.find({
+  where: {
+    nome: "João Silva"
+  },
+  orderBy: {
+    dataCriacao: "DESC"
+  },
+  limit: 10,
+  offset: 0
+});
+
+// Buscando com múltiplos filtros
+const usuariosAvancado = await usuarioRepository.find({
+  where: {
+    nome: "João Silva",
+    email: "joao@exemplo.com"
+  },
+  orderBy: {
+    dataCriacao: "DESC",
+    nome: "ASC"
+  },
+  limit: 5,
+  offset: 10
+});
 
 // Atualizando um usuário
 usuario.nome = "João da Silva";

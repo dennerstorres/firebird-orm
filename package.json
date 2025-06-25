@@ -1,5 +1,5 @@
 {
-  "name": "fireorm",
+  "name": "firebird-orm",
   "version": "0.1.0",
   "description": "Um ORM elegante e tipado para Firebird",
   "main": "dist/index.js",
@@ -16,7 +16,7 @@
     "typescript",
     "node-firebird"
   ],
-  "author": "",
+  "author": "Denner Torres",
   "license": "MIT",
   "dependencies": {
     "node-firebird": "^1.1.5",
