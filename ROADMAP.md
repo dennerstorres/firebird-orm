@@ -2,7 +2,7 @@
 
 > Este arquivo é o plano oficial de evolução do pacote.
 > Cada task é auto-contida e pode ser implementada de forma independente por um agente de IA.
-> Status: `[ ]` pendente · `[x]` concluído · `[~]` em progresso
+> Status: `[ ]` pendente · `[~]` em progresso (PR aberto, aguardando review/merge) · `[x]` concluído (PR mergeado)
 
 ---
 
