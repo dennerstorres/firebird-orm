@@ -1,21 +1,52 @@
 import * as Firebird from 'node-firebird';
-import { ConnectionOptions } from './index';
+import { FirebirdConnectionOptions } from './types';
 import { Repository } from './repository';
 
+/**
+ * Representa uma conexão ativa com o banco de dados Firebird.
+ *
+ * @example
+ * ```typescript
+ * const connection = await createConnection(options);
+ * const repo = await connection.getRepository(User);
+ * ```
+ */
 export class Connection {
-  private options: ConnectionOptions;
+  private options: FirebirdConnectionOptions;
   private pool: any;
+  private repositories: Map<Function, Repository<unknown>> = new Map();
 
-  constructor(options: ConnectionOptions) {
+  constructor(options: FirebirdConnectionOptions) {
     this.options = options;
-    this.pool = Firebird.pool(5, options);
+    this.pool = Firebird.pool(options.poolSize || 5, options);
   }
 
+  /**
+   * Obtém um repositório para a entidade fornecida.
+   *
+   * @example
+   * ```typescript
+   * const repo = await connection.getRepository(User);
+   * ```
+   */
   async getRepository<T>(entity: new () => T): Promise<Repository<T>> {
-    return new Repository<T>(this.pool, entity);
+    if (this.repositories.has(entity)) {
+      return this.repositories.get(entity) as Repository<T>;
+    }
+    const repo = new Repository<T>(this.pool, entity);
+    this.repositories.set(entity, repo as Repository<unknown>);
+    return repo;
   }
 
-  async query<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+  /**
+   * Executa uma query SQL diretamente.
+   *
+   * @example
+   * ```typescript
+   * const results = await connection.query('SELECT * FROM USERS WHERE ID = ?', [1]);
+   * ```
+   */
+  async query<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
     return new Promise((resolve, reject) => {
       this.pool.get((err: Error, db: any) => {
         if (err) {
@@ -35,6 +66,14 @@ export class Connection {
     });
   }
 
+  /**
+   * Fecha o pool de conexões.
+   *
+   * @example
+   * ```typescript
+   * await connection.close();
+   * ```
+   */
   async close(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.pool.destroy((err: Error) => {
@@ -48,6 +87,20 @@ export class Connection {
   }
 }
 
-export async function createConnection(options: ConnectionOptions): Promise<Connection> {
+/**
+ * Cria uma nova conexão com o banco de dados Firebird.
+ *
+ * @example
+ * ```typescript
+ * const connection = await createConnection({
+ *   host: 'localhost',
+ *   database: 'test',
+ *   user: 'SYSDBA',
+ *   password: 'masterkey',
+ *   port: 3050
+ * });
+ * ```
+ */
+export async function createConnection(options: FirebirdConnectionOptions): Promise<Connection> {
   return new Connection(options);
-} 
+}
