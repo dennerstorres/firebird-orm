@@ -1,157 +1,206 @@
 import 'reflect-metadata';
 import { ColumnMetadata, NoPrimaryKeyError } from './types';
 
+/** @internal */
 export const ENTITY_METADATA_KEY = Symbol('entity');
+/** @internal */
 export const COLUMN_METADATA_KEY = Symbol('column');
-export const PRIMARY_COLUMN_METADATA_KEY = Symbol('primary');
-
-/**
- * Opções para a entidade.
- */
-export interface EntityOptions {
-  /** Nome da tabela no banco de dados. Se omitido, usa o nome da classe em minúsculo. */
-  name?: string;
-}
 
 /**
  * Opções para a coluna.
  */
 export interface ColumnOptions {
-  /** Nome da coluna no banco de dados. Se omitido, usa o nome da propriedade. */
+  /** Nome da coluna no banco de dados. Se omitido, usa o nome da propriedade em MAIÚSCULO. */
   name?: string;
-  /** Tipo da coluna. */
-  type?: string;
   /** Se a coluna pode ser nula. */
   nullable?: boolean;
-  /** Tamanho da coluna. */
-  length?: number;
 }
 
 /**
- * Decorator que marca uma classe como uma entidade.
+ * Opções para coluna de chave primária gerada.
+ */
+export interface PrimaryGeneratedColumnOptions {
+  /** Nome da coluna no banco de dados. Se omitido, usa o nome da propriedade em MAIÚSCULO. */
+  name?: string;
+  /** Nome da sequence. Se omitido, usa o padrão GEN_{TABELA}_{COLUNA}. */
+  sequenceName?: string;
+}
+
+/**
+ * Decorator que marca uma classe como uma entidade do Firebird.
+ *
+ * @param tableName - Nome da tabela no banco de dados.
  *
  * @example
  * ```typescript
- * @Entity({ name: 'USERS' })
- * class User {}
+ * @Entity('USUARIOS')
+ * class Usuario {
+ *   @PrimaryGeneratedColumn()
+ *   id: number;
+ * }
  * ```
  */
-export function Entity(options: EntityOptions = {}): ClassDecorator {
+export function Entity(tableName: string): ClassDecorator {
   return (target: Function) => {
-    Reflect.defineMetadata(ENTITY_METADATA_KEY, {
-      name: options.name || target.name.toLowerCase(),
-      target
-    }, target);
+    Reflect.defineMetadata(ENTITY_METADATA_KEY, tableName.toUpperCase(), target);
   };
 }
 
 /**
- * Decorator que marca uma propriedade como uma coluna.
+ * Decorator que marca uma propriedade como uma coluna comum.
+ *
+ * @param options - Opções de configuração da coluna.
  *
  * @example
  * ```typescript
- * @Column({ name: 'USER_NAME', length: 100 })
+ * @Column({ name: 'NOME_COMPLETO', nullable: false })
  * name: string;
+ *
+ * @Column()
+ * email: string; // vira EMAIL no banco
  * ```
  */
 export function Column(options: ColumnOptions = {}): PropertyDecorator {
   return (target: Object, propertyKey: string | symbol) => {
     const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, target.constructor) || [];
+
     columns.push({
-      columnName: options.name || propertyKey.toString(),
       propertyKey,
-      nullable: options.nullable
+      columnName: (options.name || propertyKey.toString()).toUpperCase(),
+      nullable: options.nullable,
+      primary: false,
+      generated: false
     });
+
     Reflect.defineMetadata(COLUMN_METADATA_KEY, columns, target.constructor);
   };
 }
 
 /**
- * Decorator que marca uma propriedade como chave primária gerada automaticamente.
+ * Decorator para chave primária com geração automática via Sequence.
+ *
+ * @param options - Opções de configuração da PK e Sequence.
  *
  * @example
  * ```typescript
  * @PrimaryGeneratedColumn()
+ * id: number; // sequence padrão: GEN_TABELA_ID
+ *
+ * @PrimaryGeneratedColumn({ sequenceName: 'SEQ_USER_ID' })
  * id: number;
  * ```
  */
-export function PrimaryGeneratedColumn(): PropertyDecorator {
+export function PrimaryGeneratedColumn(options: PrimaryGeneratedColumnOptions = {}): PropertyDecorator {
   return (target: Object, propertyKey: string | symbol) => {
-    const columns: ColumnMetadata[] = Reflect.getMetadata(PRIMARY_COLUMN_METADATA_KEY, target.constructor) || [];
+    const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, target.constructor) || [];
+
+    const columnName = (options.name || propertyKey.toString()).toUpperCase();
+
     columns.push({
-      columnName: propertyKey.toString(),
       propertyKey,
+      columnName,
       primary: true,
-      generated: true
+      generated: true,
+      sequenceName: options.sequenceName?.toUpperCase()
     });
-    Reflect.defineMetadata(PRIMARY_COLUMN_METADATA_KEY, columns, target.constructor);
+
+    Reflect.defineMetadata(COLUMN_METADATA_KEY, columns, target.constructor);
   };
 }
 
 /**
- * Decorator que marca uma propriedade como chave primária manual.
+ * Decorator para chave primária manual (sem sequence).
+ *
+ * @param options - Opções de configuração da coluna.
  *
  * @example
  * ```typescript
- * @PrimaryColumn()
+ * @PrimaryColumn({ name: 'COD_SISTEMA' })
  * code: string;
  * ```
  */
 export function PrimaryColumn(options: ColumnOptions = {}): PropertyDecorator {
   return (target: Object, propertyKey: string | symbol) => {
-    const columns: ColumnMetadata[] = Reflect.getMetadata(PRIMARY_COLUMN_METADATA_KEY, target.constructor) || [];
+    const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, target.constructor) || [];
+
     columns.push({
-      columnName: options.name || propertyKey.toString(),
       propertyKey,
+      columnName: (options.name || propertyKey.toString()).toUpperCase(),
+      nullable: options.nullable,
       primary: true,
       generated: false
     });
-    Reflect.defineMetadata(PRIMARY_COLUMN_METADATA_KEY, columns, target.constructor);
+
+    Reflect.defineMetadata(COLUMN_METADATA_KEY, columns, target.constructor);
   };
 }
 
 /**
- * Helper para obter o nome da tabela de uma entidade.
+ * Helper para obter o nome da tabela registrado em uma entidade.
+ *
+ * @param target - Classe da entidade.
+ * @returns O nome da tabela em MAIÚSCULO.
+ * @throws Erro se a classe não tiver o decorator @Entity.
  *
  * @example
  * ```typescript
- * const tableName = getTableName(User);
+ * const table = getTableName(Usuario); // 'USUARIOS'
  * ```
  */
 export function getTableName(target: Function): string {
-  const metadata = Reflect.getMetadata(ENTITY_METADATA_KEY, target);
-  if (!metadata) {
-    throw new Error(`A classe ${target.name} não é uma entidade válida. Adicione @Entity.`);
+  const tableName = Reflect.getMetadata(ENTITY_METADATA_KEY, target);
+  if (!tableName) {
+    throw new Error(`[firebird-orm] A classe ${target.name} não é uma entidade válida. Adicione @Entity('TABELA').`);
   }
-  return metadata.name.toUpperCase();
+  return tableName;
 }
 
 /**
- * Helper para obter os metadados de coluna de uma entidade.
+ * Helper para obter todos os metadados de colunas de uma entidade.
+ *
+ * @param target - Classe da entidade.
+ * @returns Array com os metadados de todas as colunas.
  *
  * @example
  * ```typescript
- * const columns = getColumnMetadata(User);
+ * const meta = getColumnMetadata(Usuario);
  * ```
  */
 export function getColumnMetadata(target: Function): ColumnMetadata[] {
+  const tableName = getTableName(target);
   const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, target) || [];
-  const primaryColumns: ColumnMetadata[] = Reflect.getMetadata(PRIMARY_COLUMN_METADATA_KEY, target) || [];
-  return [...columns, ...primaryColumns];
+
+  // Resolve default sequence names for generated columns
+  return columns.map(col => {
+    if (col.generated && !col.sequenceName) {
+      return {
+        ...col,
+        sequenceName: `GEN_${tableName}_${col.columnName}`.toUpperCase()
+      };
+    }
+    return col;
+  });
 }
 
 /**
- * Helper para obter a chave primária de uma entidade.
+ * Helper para obter o metadado da chave primária de uma entidade.
+ *
+ * @param target - Classe da entidade.
+ * @returns Metadado da coluna PK.
+ * @throws NoPrimaryKeyError se não houver coluna PK definida.
  *
  * @example
  * ```typescript
- * const pk = getPrimaryColumn(User);
+ * const pk = getPrimaryColumn(Usuario);
  * ```
  */
 export function getPrimaryColumn(target: Function): ColumnMetadata {
-  const primaryColumns: ColumnMetadata[] = Reflect.getMetadata(PRIMARY_COLUMN_METADATA_KEY, target) || [];
-  if (!primaryColumns.length) {
+  const columns = getColumnMetadata(target);
+  const primary = columns.find(col => col.primary);
+
+  if (!primary) {
     throw new NoPrimaryKeyError(target.name);
   }
-  return primaryColumns[0];
+
+  return primary;
 }

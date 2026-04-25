@@ -1,4 +1,4 @@
-import { ENTITY_METADATA_KEY, COLUMN_METADATA_KEY, PRIMARY_COLUMN_METADATA_KEY } from './decorators';
+import { ENTITY_METADATA_KEY, COLUMN_METADATA_KEY } from './decorators';
 import { FindOptions, EntityNotFoundError, NoPrimaryKeyError, ColumnMetadata } from './types';
 
 export class Repository<T> {
@@ -14,16 +14,14 @@ export class Repository<T> {
 
   private getColumnName(propertyKey: string | symbol): string {
     const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
-    const primaryColumns: ColumnMetadata[] = Reflect.getMetadata(PRIMARY_COLUMN_METADATA_KEY, this.entity) || [];
     
-    const allColumns = [...columns, ...primaryColumns];
-    const column = allColumns.find(col => col.propertyKey === propertyKey);
+    const column = columns.find(col => col.propertyKey === propertyKey);
     return (column?.columnName || propertyKey.toString()).toUpperCase();
   }
 
   private async getNextId(): Promise<number> {
     return new Promise((resolve, reject) => {
-      const tableName = this.metadata.name.toUpperCase();
+      const tableName = this.metadata;
       const sql = `SELECT NEXT VALUE FOR GEN_${tableName}_ID FROM RDB$DATABASE`;
 
       this.pool.get((err: Error, db: any) => {
@@ -76,11 +74,8 @@ export class Repository<T> {
   private mapResultToEntity(result: any): T {
     const entity = new this.entity();
     const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
-    const primaryColumns: ColumnMetadata[] = Reflect.getMetadata(PRIMARY_COLUMN_METADATA_KEY, this.entity) || [];
     
-    const allColumns = [...columns, ...primaryColumns];
-    
-    allColumns.forEach(column => {
+    columns.forEach(column => {
       const columnName = column.columnName.toUpperCase();
       const resultKey = Object.keys(result).find(key => key.toUpperCase() === columnName);
       
@@ -102,14 +97,14 @@ export class Repository<T> {
    */
   async findOne(id: string | number): Promise<T | null> {
     return new Promise((resolve, reject) => {
-      const primaryColumns: ColumnMetadata[] = Reflect.getMetadata(PRIMARY_COLUMN_METADATA_KEY, this.entity) || [];
-      if (!primaryColumns.length) {
+      const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
+      const primaryColumn = columns.find(col => col.primary);
+      if (!primaryColumn) {
         reject(new NoPrimaryKeyError(this.entity.name));
         return;
       }
 
-      const primaryColumn = primaryColumns[0];
-      const tableName = this.metadata.name.toUpperCase();
+      const tableName = this.metadata;
       const sql = `SELECT * FROM ${tableName} WHERE ${primaryColumn.columnName.toUpperCase()} = ?`;
 
       this.pool.get((err: Error, db: any) => {
@@ -144,7 +139,7 @@ export class Repository<T> {
    */
   async find(options?: FindOptions<T>): Promise<T[]> {
     return new Promise((resolve, reject) => {
-      const tableName = this.metadata.name.toUpperCase();
+      const tableName = this.metadata;
       const whereClause = options?.where ? this.buildWhereClause(options.where) : { sql: '', params: [] };
       const orderByClause = options?.orderBy ? this.buildOrderByClause(options.orderBy) : '';
       const limitClause = options?.take ? `FIRST ${options.take}` : '';
@@ -189,12 +184,11 @@ export class Repository<T> {
   async save(entity: Partial<T>): Promise<T> {
     return new Promise(async (resolve, reject) => {
       const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
-      const primaryColumns: ColumnMetadata[] = Reflect.getMetadata(PRIMARY_COLUMN_METADATA_KEY, this.entity) || [];
-      const tableName = this.metadata.name.toUpperCase();
+      const primaryColumn = columns.find(col => col.primary);
+      const tableName = this.metadata;
 
       try {
-        if (primaryColumns.length) {
-          const primaryColumn = primaryColumns[0];
+        if (primaryColumn) {
           const id = (entity as any)[primaryColumn.propertyKey];
           
           if (!id) {
@@ -208,7 +202,11 @@ export class Repository<T> {
         const values = columns.map((col: ColumnMetadata) => (entity as any)[col.propertyKey]);
 
         // Using RETURNING for Firebird 2.1+
-        const primaryColumn = primaryColumns[0];
+        if (!primaryColumn) {
+          reject(new NoPrimaryKeyError(this.entity.name));
+          return;
+        }
+
         const sql = `INSERT INTO ${tableName} (${columnNames}) VALUES (${placeholders}) RETURNING ${primaryColumn.columnName.toUpperCase()}`;
 
         this.pool.get((err: Error, db: any) => {
@@ -253,15 +251,14 @@ export class Repository<T> {
   async update(id: string | number, entity: Partial<T>): Promise<T> {
     return new Promise((resolve, reject) => {
       const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
-      const primaryColumns: ColumnMetadata[] = Reflect.getMetadata(PRIMARY_COLUMN_METADATA_KEY, this.entity) || [];
-      const tableName = this.metadata.name.toUpperCase();
+      const primaryColumn = columns.find(col => col.primary);
+      const tableName = this.metadata;
 
-      if (!primaryColumns.length) {
+      if (!primaryColumn) {
         reject(new NoPrimaryKeyError(this.entity.name));
         return;
       }
 
-      const primaryColumn = primaryColumns[0];
       const setClause = columns
         .map((col: ColumnMetadata) => `${col.columnName.toUpperCase()} = ?`)
         .join(', ');
@@ -308,15 +305,15 @@ export class Repository<T> {
    */
   async delete(id: string | number): Promise<void> {
     return new Promise((resolve, reject) => {
-      const primaryColumns: ColumnMetadata[] = Reflect.getMetadata(PRIMARY_COLUMN_METADATA_KEY, this.entity) || [];
-      const tableName = this.metadata.name.toUpperCase();
+      const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
+      const primaryColumn = columns.find(col => col.primary);
+      const tableName = this.metadata;
 
-      if (!primaryColumns.length) {
+      if (!primaryColumn) {
         reject(new NoPrimaryKeyError(this.entity.name));
         return;
       }
 
-      const primaryColumn = primaryColumns[0];
       const sql = `DELETE FROM ${tableName} WHERE ${primaryColumn.columnName.toUpperCase()} = ?`;
 
       this.pool.get((err: Error, db: any) => {
