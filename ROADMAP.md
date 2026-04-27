@@ -372,8 +372,8 @@ V1 → V2 → V3 → V4              (features — após Q1)
 | Task | Título | Status |
 |------|--------|--------|
 | F1 | Tipos e interfaces base | [x] |
-| F2 | Decorators de entidade | [~] |
-| F3 | QueryBuilder interno | [ ] |
+| F2 | Decorators de entidade | [x] |
+| F3 | QueryBuilder interno | [~] |
 | F4 | Repository | [ ] |
 | F5 | Connection e createConnection | [ ] |
 | F6 | Barrel export + index.ts | [ ] |
