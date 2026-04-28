@@ -1,336 +1,363 @@
-import { ENTITY_METADATA_KEY, COLUMN_METADATA_KEY } from './decorators';
-import { FindOptions, EntityNotFoundError, NoPrimaryKeyError, ColumnMetadata } from './types';
+import { QueryBuilder } from './query-builder';
+import { getTableName, getColumnMetadata, getPrimaryColumn } from './decorators';
+import { FindOptions, EntityNotFoundError, ColumnMetadata } from './types';
 
+/**
+ * Repositório genérico para operações CRUD em entidades do Firebird.
+ *
+ * @template T - Tipo da entidade.
+ *
+ * @example
+ * ```typescript
+ * const repo = connection.getRepository(User);
+ * const user = await repo.findOne(1);
+ * ```
+ */
 export class Repository<T> {
-  private pool: any;
-  private entity: new () => T;
-  private metadata: any;
+  private readonly qb = new QueryBuilder();
 
-  constructor(pool: any, entity: new () => T) {
-    this.pool = pool;
-    this.entity = entity;
-    this.metadata = Reflect.getMetadata(ENTITY_METADATA_KEY, entity);
-  }
+  /**
+   * @internal
+   */
+  constructor(
+    private readonly pool: any,
+    private readonly EntityClass: new () => T
+  ) {}
 
-  private getColumnName(propertyKey: string | symbol): string {
-    const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
-    
-    const column = columns.find(col => col.propertyKey === propertyKey);
-    return (column?.columnName || propertyKey.toString()).toUpperCase();
-  }
-
-  private async getNextId(): Promise<number> {
+  /**
+   * Executa uma função dentro de uma transação.
+   *
+   * @param fn - Função a ser executada.
+   * @returns Resultado da função.
+   *
+   * @example
+   * ```typescript
+   * await repository.executeInTransaction(async (db) => {
+   *   await db.query(sql1);
+   *   await db.query(sql2);
+   * });
+   * ```
+   */
+  private async executeInTransaction<R>(fn: (db: any) => Promise<R>): Promise<R> {
     return new Promise((resolve, reject) => {
-      const tableName = this.metadata;
-      const sql = `SELECT NEXT VALUE FOR GEN_${tableName}_ID FROM RDB$DATABASE`;
-
       this.pool.get((err: Error, db: any) => {
-        if (err) {
-          reject(err);
-          return;
-        }
+        if (err) return reject(err);
 
-        db.query(sql, [], (err: Error, result: any[]) => {
-          db.detach();
+        db.transaction(Firebird.ISOLATION_READ_COMMITTED, async (err: Error, transaction: any) => {
           if (err) {
-            reject(err);
-            return;
+            db.detach();
+            return reject(err);
           }
-          // node-firebird can return different structures depending on query
-          const id = result[0][Object.keys(result[0])[0]];
-          resolve(id);
+
+          try {
+            const result = await fn(transaction);
+            transaction.commit((err: Error) => {
+              db.detach();
+              if (err) return reject(err);
+              resolve(result);
+            });
+          } catch (error) {
+            transaction.rollback(() => {
+              db.detach();
+              reject(error);
+            });
+          }
         });
       });
     });
   }
 
-  private buildWhereClause(where: Partial<T>): { sql: string; params: unknown[] } {
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-    
-    Object.entries(where).forEach(([key, value]) => {
-      const columnName = this.getColumnName(key);
-      conditions.push(`${columnName} = ?`);
-      params.push(value);
+  /**
+   * Promisifica a execução de uma query no node-firebird.
+   *
+   * @param connection - Conexão ou Transação do node-firebird.
+   * @param sql - Query SQL.
+   * @param params - Parâmetros da query.
+   * @returns Resultados da query.
+   */
+  private async queryAsync<R = any>(connection: any, sql: string, params: unknown[] = []): Promise<R[]> {
+    return new Promise((resolve, reject) => {
+      connection.query(sql, params, (err: Error, result: R[]) => {
+        if (err) return reject(err);
+        resolve(result || []);
+      });
     });
-
-    return {
-      sql: conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '',
-      params
-    };
   }
 
-  private buildOrderByClause(orderBy: { [K in keyof T]?: 'ASC' | 'DESC' }): string {
-    const orders: string[] = [];
-    
-    Object.entries(orderBy).forEach(([key, direction]) => {
-      const columnName = this.getColumnName(key);
-      orders.push(`${columnName} ${direction}`);
-    });
+  /**
+   * Mapeia uma linha do banco de dados para uma instância da entidade.
+   *
+   * @param row - Linha retornada pelo driver.
+   * @returns Instância da entidade.
+   */
+  private mapToEntity(row: any): T {
+    const entity = new this.EntityClass();
+    const columns = getColumnMetadata(this.EntityClass);
 
-    return orders.length > 0 ? `ORDER BY ${orders.join(', ')}` : '';
-  }
-
-  private mapResultToEntity(result: any): T {
-    const entity = new this.entity();
-    const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
-    
-    columns.forEach(column => {
-      const columnName = column.columnName.toUpperCase();
-      const resultKey = Object.keys(result).find(key => key.toUpperCase() === columnName);
-      
-      if (resultKey) {
-        (entity as any)[column.propertyKey] = result[resultKey];
+    for (const col of columns) {
+      const dbValue = row[col.columnName.toUpperCase()];
+      if (dbValue !== undefined) {
+        (entity as any)[col.propertyKey] = dbValue;
       }
-    });
+    }
 
     return entity;
   }
 
   /**
-   * Encontra uma entidade pelo ID.
+   * Mapeia um objeto parcial da entidade para pares de coluna/valor do banco.
    *
-   * @example
-   * ```typescript
-   * const user = await repository.findOne(1);
-   * ```
+   * @param entity - Objeto parcial da entidade.
+   * @returns Objeto com chaves em UPPERCASE.
    */
-  async findOne(id: string | number): Promise<T | null> {
-    return new Promise((resolve, reject) => {
-      const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
-      const primaryColumn = columns.find(col => col.primary);
-      if (!primaryColumn) {
-        reject(new NoPrimaryKeyError(this.entity.name));
-        return;
+  private mapToColumns(entity: Partial<T>): Record<string, unknown> {
+    const columns = getColumnMetadata(this.EntityClass);
+    const result: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(entity)) {
+      const col = columns.find(c => c.propertyKey === key);
+      if (col) {
+        result[col.columnName.toUpperCase()] = value;
       }
+    }
 
-      const tableName = this.metadata;
-      const sql = `SELECT * FROM ${tableName} WHERE ${primaryColumn.columnName.toUpperCase()} = ?`;
-
-      this.pool.get((err: Error, db: any) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-
-        db.query(sql, [id], (err: Error, result: any[]) => {
-          db.detach();
-          if (err) {
-            reject(err);
-            return;
-          }
-          if (!result || result.length === 0) {
-            resolve(null);
-            return;
-          }
-          resolve(this.mapResultToEntity(result[0]));
-        });
-      });
-    });
+    return result;
   }
 
   /**
-   * Encontra entidades que satisfaçam as opções.
+   * Encontra todas as entidades que satisfazem as condições de busca.
+   *
+   * @param options - Opções de busca (where, orderBy, take, skip, select).
+   * @returns Array de entidades.
    *
    * @example
    * ```typescript
-   * const users = await repository.find({ where: { active: true } });
+   * const users = await repo.find({ where: { active: true }, take: 10 });
    * ```
    */
-  async find(options?: FindOptions<T>): Promise<T[]> {
-    return new Promise((resolve, reject) => {
-      const tableName = this.metadata;
-      const whereClause = options?.where ? this.buildWhereClause(options.where) : { sql: '', params: [] };
-      const orderByClause = options?.orderBy ? this.buildOrderByClause(options.orderBy) : '';
-      const limitClause = options?.take ? `FIRST ${options.take}` : '';
-      const offsetClause = options?.skip ? `SKIP ${options.skip}` : '';
+  async find(options: FindOptions<T> = {}): Promise<T[]> {
+    const tableName = getTableName(this.EntityClass);
+    const columns = getColumnMetadata(this.EntityClass);
 
-      const sql = `
-        SELECT ${limitClause} ${offsetClause} * FROM ${tableName}
-        ${whereClause.sql}
-        ${orderByClause}
-      `.trim().replace(/\s+/g, ' ');
+    const selectColumns = options.select
+      ? options.select.map(s => columns.find(c => c.propertyKey === s)?.columnName || s.toString())
+      : columns.map(c => c.columnName);
 
-      this.pool.get((err: Error, db: any) => {
-        if (err) {
-          reject(err);
-          return;
+    const where = options.where ? this.mapToColumns(options.where) : undefined;
+
+    let orderBy: Record<string, 'ASC' | 'DESC'> | undefined;
+    if (options.orderBy) {
+      orderBy = {};
+      for (const [key, dir] of Object.entries(options.orderBy)) {
+        const col = columns.find(c => c.propertyKey === key);
+        if (col) {
+          orderBy[col.columnName.toUpperCase()] = dir as 'ASC' | 'DESC';
         }
+      }
+    }
 
-        db.query(sql, whereClause.params, (err: Error, result: any[]) => {
-          db.detach();
-          if (err) {
+    const { sql, params } = this.qb.buildSelect(
+      tableName,
+      selectColumns,
+      where,
+      orderBy,
+      options.take,
+      options.skip
+    );
+
+    return new Promise((resolve, reject) => {
+      this.pool.get((err: Error, db: any) => {
+        if (err) return reject(err);
+        this.queryAsync(db, sql, params)
+          .then(rows => {
+            db.detach();
+            resolve(rows.map(row => this.mapToEntity(row)));
+          })
+          .catch(err => {
+            db.detach();
             reject(err);
-            return;
-          }
-          if (!result) {
-            resolve([]);
-            return;
-          }
-          resolve(result.map(row => this.mapResultToEntity(row)));
-        });
+          });
       });
     });
   }
 
   /**
-   * Salva uma entidade (INSERT ou UPDATE).
+   * Encontra uma única entidade pelo seu ID.
+   *
+   * @param id - Valor da chave primária.
+   * @returns A entidade encontrada ou null.
    *
    * @example
    * ```typescript
-   * const savedUser = await repository.save({ name: 'John' });
+   * const user = await repo.findOne(1);
+   * ```
+   */
+  async findOne(id: number | string): Promise<T | null> {
+    const pk = getPrimaryColumn(this.EntityClass);
+    const results = await this.find({
+      where: { [pk.propertyKey]: id } as any,
+      take: 1
+    });
+
+    return results.length > 0 ? results[0] : null;
+  }
+
+  /**
+   * Encontra uma única entidade pelo seu ID ou lança erro se não encontrar.
+   *
+   * @param id - Valor da chave primária.
+   * @returns A entidade encontrada.
+   * @throws EntityNotFoundError
+   *
+   * @example
+   * ```typescript
+   * const user = await repo.findOneOrFail(1);
+   * ```
+   */
+  async findOneOrFail(id: number | string): Promise<T> {
+    const entity = await this.findOne(id);
+    if (!entity) {
+      throw new EntityNotFoundError(this.EntityClass.name, id);
+    }
+    return entity;
+  }
+
+  /**
+   * Salva uma entidade. Realiza um UPDATE se a chave primária estiver presente,
+   * caso contrário, realiza um INSERT gerando um novo ID via Sequence.
+   *
+   * @param entity - Dados da entidade a serem salvos.
+   * @returns A entidade salva e atualizada (incluindo ID gerado).
+   *
+   * @example
+   * ```typescript
+   * const newUser = await repo.save({ name: 'John Doe' });
+   * const updatedUser = await repo.save({ id: 1, name: 'John Updated' });
    * ```
    */
   async save(entity: Partial<T>): Promise<T> {
-    return new Promise(async (resolve, reject) => {
-      const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
-      const primaryColumn = columns.find(col => col.primary);
-      const tableName = this.metadata;
+    const pk = getPrimaryColumn(this.EntityClass);
+    const id = (entity as any)[pk.propertyKey];
 
-      try {
-        if (primaryColumn) {
-          const id = (entity as any)[primaryColumn.propertyKey];
-          
-          if (!id) {
-            const nextId = await this.getNextId();
-            (entity as any)[primaryColumn.propertyKey] = nextId;
-          }
-        }
-        
-        const columnNames = columns.map((col: ColumnMetadata) => col.columnName.toUpperCase()).join(', ');
-        const placeholders = columns.map(() => '?').join(', ');
-        const values = columns.map((col: ColumnMetadata) => (entity as any)[col.propertyKey]);
+    if (id) {
+      await this.update(id, entity);
+      return this.findOneOrFail(id);
+    }
 
-        // Using RETURNING for Firebird 2.1+
-        if (!primaryColumn) {
-          reject(new NoPrimaryKeyError(this.entity.name));
-          return;
-        }
+    return this.executeInTransaction(async (db) => {
+      const tableName = getTableName(this.EntityClass);
+      let entityToInsert = { ...entity };
 
-        const sql = `INSERT INTO ${tableName} (${columnNames}) VALUES (${placeholders}) RETURNING ${primaryColumn.columnName.toUpperCase()}`;
+      if (pk.generated) {
+        const seqSql = `SELECT NEXT VALUE FOR ${pk.sequenceName} FROM RDB$DATABASE`;
+        const seqResult = await this.queryAsync(db, seqSql);
+        const nextId = seqResult[0][Object.keys(seqResult[0])[0]];
+        (entityToInsert as any)[pk.propertyKey] = nextId;
+      }
 
-        this.pool.get((err: Error, db: any) => {
-          if (err) {
-            reject(err);
-            return;
-          }
+      const columnsMap = this.mapToColumns(entityToInsert);
+      const { sql, params } = this.qb.buildInsert(
+        tableName,
+        Object.keys(columnsMap),
+        Object.values(columnsMap),
+        pk.columnName
+      );
 
-          db.query(sql, values, (err: Error, result: any) => {
+      const insertResult = await this.queryAsync(db, sql, params);
+      const generatedId = insertResult[0][pk.columnName.toUpperCase()];
+
+      const selectSql = `SELECT * FROM ${tableName} WHERE ${pk.columnName.toUpperCase()} = ?`;
+      const rows = await this.queryAsync(db, selectSql, [generatedId]);
+      return this.mapToEntity(rows[0]);
+    });
+  }
+
+  /**
+   * Atualiza uma entidade existente pelo seu ID.
+   *
+   * @param id - Valor da chave primária.
+   * @param data - Dados a serem atualizados.
+   *
+   * @example
+   * ```typescript
+   * await repo.update(1, { active: false });
+   * ```
+   */
+  async update(id: number | string, data: Partial<T>): Promise<void> {
+    const pk = getPrimaryColumn(this.EntityClass);
+    const tableName = getTableName(this.EntityClass);
+
+    const sets = this.mapToColumns(data);
+    delete sets[pk.columnName.toUpperCase()];
+
+    if (Object.keys(sets).length === 0) return;
+
+    const { sql, params } = this.qb.buildUpdate(
+      tableName,
+      sets,
+      pk.columnName,
+      id
+    );
+
+    await this.executeInTransaction(async (db) => {
+      await this.queryAsync(db, sql, params);
+    });
+  }
+
+  /**
+   * Remove uma entidade pelo seu ID.
+   *
+   * @param id - Valor da chave primária.
+   *
+   * @example
+   * ```typescript
+   * await repo.delete(1);
+   * ```
+   */
+  async delete(id: number | string): Promise<void> {
+    const pk = getPrimaryColumn(this.EntityClass);
+    const tableName = getTableName(this.EntityClass);
+
+    const { sql, params } = this.qb.buildDelete(tableName, pk.columnName, id);
+
+    await this.executeInTransaction(async (db) => {
+      await this.queryAsync(db, sql, params);
+    });
+  }
+
+  /**
+   * Conta a quantidade de registros que satisfazem as condições.
+   *
+   * @param where - Filtros da busca.
+   * @returns Quantidade de registros.
+   *
+   * @example
+   * ```typescript
+   * const count = await repo.count({ active: true });
+   * ```
+   */
+  async count(where?: Partial<T>): Promise<number> {
+    const tableName = getTableName(this.EntityClass);
+    const whereMap = where ? this.mapToColumns(where) : undefined;
+
+    const { sql, params } = this.qb.buildCount(tableName, whereMap);
+
+    return new Promise((resolve, reject) => {
+      this.pool.get((err: Error, db: any) => {
+        if (err) return reject(err);
+        this.queryAsync(db, sql, params)
+          .then(rows => {
             db.detach();
-            if (err) {
-              reject(err);
-              return;
-            }
-
-            const id = result[0][primaryColumn.columnName.toUpperCase()];
-            this.findOne(id)
-              .then(savedEntity => {
-                if (!savedEntity) {
-                  reject(new EntityNotFoundError(this.entity.name, id));
-                  return;
-                }
-                resolve(savedEntity);
-              })
-              .catch(reject);
+            const count = rows[0][Object.keys(rows[0])[0]];
+            resolve(Number(count));
+          })
+          .catch(err => {
+            db.detach();
+            reject(err);
           });
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
-  }
-
-  /**
-   * Atualiza uma entidade pelo ID.
-   *
-   * @example
-   * ```typescript
-   * await repository.update(1, { name: 'John Doe' });
-   * ```
-   */
-  async update(id: string | number, entity: Partial<T>): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
-      const primaryColumn = columns.find(col => col.primary);
-      const tableName = this.metadata;
-
-      if (!primaryColumn) {
-        reject(new NoPrimaryKeyError(this.entity.name));
-        return;
-      }
-
-      const setClause = columns
-        .map((col: ColumnMetadata) => `${col.columnName.toUpperCase()} = ?`)
-        .join(', ');
-      const values = [
-        ...columns.map((col: ColumnMetadata) => (entity as any)[col.propertyKey]),
-        id
-      ];
-
-      const sql = `UPDATE ${tableName} SET ${setClause} WHERE ${primaryColumn.columnName.toUpperCase()} = ?`;
-
-      this.pool.get((err: Error, db: any) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-
-        db.query(sql, values, (err: Error) => {
-          db.detach();
-          if (err) {
-            reject(err);
-            return;
-          }
-          this.findOne(id)
-            .then(updatedEntity => {
-              if (!updatedEntity) {
-                reject(new EntityNotFoundError(this.entity.name, id));
-                return;
-              }
-              resolve(updatedEntity);
-            })
-            .catch(reject);
-        });
-      });
-    });
-  }
-
-  /**
-   * Deleta uma entidade pelo ID.
-   *
-   * @example
-   * ```typescript
-   * await repository.delete(1);
-   * ```
-   */
-  async delete(id: string | number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const columns: ColumnMetadata[] = Reflect.getMetadata(COLUMN_METADATA_KEY, this.entity) || [];
-      const primaryColumn = columns.find(col => col.primary);
-      const tableName = this.metadata;
-
-      if (!primaryColumn) {
-        reject(new NoPrimaryKeyError(this.entity.name));
-        return;
-      }
-
-      const sql = `DELETE FROM ${tableName} WHERE ${primaryColumn.columnName.toUpperCase()} = ?`;
-
-      this.pool.get((err: Error, db: any) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-
-        db.query(sql, [id], (err: Error) => {
-          db.detach();
-          if (err) {
-            reject(err);
-            return;
-          }
-          resolve();
-        });
       });
     });
   }
 }
+
+import * as Firebird from 'node-firebird';
