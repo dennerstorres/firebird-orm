@@ -374,8 +374,8 @@ V1 → V2 → V3 → V4              (features — após Q1)
 | F1 | Tipos e interfaces base | [x] |
 | F2 | Decorators de entidade | [x] |
 | F3 | QueryBuilder interno | [x] |
-| F4 | Repository | [~] |
-| F5 | Connection e createConnection | [~] |
+| F4 | Repository | [x] |
+| F5 | Connection e createConnection | [x] |
 | F6 | Barrel export + index.ts | [ ] |
 | A1 | Arquivo llms.txt | [ ] |
 | A2 | JSDoc completo | [ ] |
