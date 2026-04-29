@@ -24,6 +24,9 @@ export class Connection {
   /**
    * Obtém um repositório para a entidade fornecida.
    *
+   * @param entity - Classe da entidade.
+   * @returns Repositório da entidade.
+   *
    * @example
    * ```typescript
    * const repo = await connection.getRepository(User);
@@ -36,6 +39,51 @@ export class Connection {
     const repo = new Repository<T>(this.pool, entity);
     this.repositories.set(entity, repo as Repository<unknown>);
     return repo;
+  }
+
+  /**
+   * Executa um bloco de código dentro de uma transação.
+   *
+   * @param fn - Função que recebe o banco e executa operações.
+   * @returns Resultado da função.
+   *
+   * @example
+   * ```typescript
+   * await connection.transaction(async (db) => {
+   *   // operações usando repositórios ou queries diretas
+   * });
+   * ```
+   *
+   * @remarks
+   * **Firebird quirk:** Toda operação de escrita DEVE estar em uma transação.
+   */
+  async transaction<R>(fn: (transaction: any) => Promise<R>): Promise<R> {
+    return new Promise((resolve, reject) => {
+      this.pool.get((err: Error, db: any) => {
+        if (err) return reject(err);
+
+        db.transaction(Firebird.ISOLATION_READ_COMMITTED, async (err: Error, transaction: any) => {
+          if (err) {
+            db.detach();
+            return reject(err);
+          }
+
+          try {
+            const result = await fn(transaction);
+            transaction.commit((err: Error) => {
+              db.detach();
+              if (err) return reject(err);
+              resolve(result);
+            });
+          } catch (error) {
+            transaction.rollback(() => {
+              db.detach();
+              reject(error);
+            });
+          }
+        });
+      });
+    });
   }
 
   /**
