@@ -11,7 +11,7 @@ import { Repository } from './repository';
  * const repo = await connection.getRepository(User);
  * ```
  */
-export class Connection {
+export class FirebirdConnection {
   private options: FirebirdConnectionOptions;
   private pool: any;
   private repositories: Map<Function, Repository<unknown>> = new Map();
@@ -149,6 +149,6 @@ export class Connection {
  * });
  * ```
  */
-export async function createConnection(options: FirebirdConnectionOptions): Promise<Connection> {
-  return new Connection(options);
+export async function createConnection(options: FirebirdConnectionOptions): Promise<FirebirdConnection> {
+  return new FirebirdConnection(options);
 }

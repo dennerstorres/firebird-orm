@@ -1,4 +1,4 @@
-export { createConnection, Connection } from './connection';
+export { createConnection, FirebirdConnection } from './connection';
 export {
   Entity,
   Column,
