@@ -30,7 +30,8 @@ jobs:
           echo "Branch mergeado: $BRANCH"
 
           # Aceita padrões: task/F1, task/A2, task/Q1, task/V1
-          if [[ "$BRANCH" =~ ^task/([A-Z][0-9]+)$ ]]; then
+          # Permite sufixos após o ID (ex: task/F6-12345)
+          if [[ "$BRANCH" =~ ^task/([A-Z][0-9]+) ]]; then
             TASK_ID="${BASH_REMATCH[1]}"
             echo "task_id=$TASK_ID" >> "$GITHUB_OUTPUT"
             echo "Task identificada: $TASK_ID"
@@ -46,8 +47,9 @@ jobs:
 
           # Substitui [~] pelo [x] na linha da task na tabela de status
           # Padrão esperado na tabela: | F1 | Título | [~] |
+          # Usamos # como separador no sed para evitar problemas com /
           if grep -q "| $TASK_ID |" ROADMAP.md; then
-            sed -i "s/| $TASK_ID | \(.*\) | \[~\] |/| $TASK_ID | \1 | [x] |/" ROADMAP.md
+            sed -i "s#| $TASK_ID | \(.*\) | \[~\] |#| $TASK_ID | \1 | [x] |#" ROADMAP.md
             echo "ROADMAP.md atualizado: task $TASK_ID marcada como [x]"
           else
             echo "Task $TASK_ID não encontrada na tabela do ROADMAP.md — nenhuma alteração feita."
