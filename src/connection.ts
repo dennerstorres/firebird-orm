@@ -3,12 +3,20 @@ import { FirebirdConnectionOptions } from './types';
 import { Repository } from './repository';
 
 /**
- * Representa uma conexão ativa com o banco de dados Firebird.
+ * Classe principal para gerenciar a conexão com o banco de dados Firebird.
+ * Utiliza um pool de conexões interno para otimizar o acesso.
  *
  * @example
  * ```typescript
- * const connection = await createConnection(options);
- * const repo = await connection.getRepository(User);
+ * const connection = await createConnection({
+ *   host: 'localhost',
+ *   database: 'C:/dados/sistema.fdb',
+ *   user: 'SYSDBA',
+ *   password: 'masterkey',
+ *   port: 3050
+ * });
+ *
+ * const userRepository = await connection.getRepository(User);
  * ```
  */
 export class FirebirdConnection {
@@ -16,16 +24,22 @@ export class FirebirdConnection {
   private pool: any;
   private repositories: Map<Function, Repository<unknown>> = new Map();
 
+  /**
+   * @internal
+   * @param options - Opções de configuração da conexão.
+   */
   constructor(options: FirebirdConnectionOptions) {
     this.options = options;
     this.pool = Firebird.pool(options.poolSize || 5, options);
   }
 
   /**
-   * Obtém um repositório para a entidade fornecida.
+   * Obtém (ou cria) uma instância de repositório para a entidade especificada.
+   * Repositórios são cacheados internamente por classe de entidade.
    *
-   * @param entity - Classe da entidade.
-   * @returns Repositório da entidade.
+   * @template T - Tipo da entidade.
+   * @param entity - Classe da entidade que possui o decorator `@Entity`.
+   * @returns Uma Promise que resolve na instância do repositório.
    *
    * @example
    * ```typescript
@@ -42,20 +56,25 @@ export class FirebirdConnection {
   }
 
   /**
-   * Executa um bloco de código dentro de uma transação.
+   * Executa um conjunto de operações de banco de dados dentro de uma transação.
+   * A transação é commitada automaticamente se a função `fn` for bem-sucedida,
+   * ou revertida (rollback) em caso de erro.
    *
-   * @param fn - Função que recebe o banco e executa operações.
-   * @returns Resultado da função.
+   * @template R - Tipo do retorno da função.
+   * @param fn - Função que recebe o objeto de transação e executa as operações.
+   * @returns O resultado da função `fn`.
    *
    * @example
    * ```typescript
-   * await connection.transaction(async (db) => {
-   *   // operações usando repositórios ou queries diretas
+   * const total = await connection.transaction(async (transaction) => {
+   *   // Uso de queries diretas ou repositórios passando a transação
+   *   return 100;
    * });
    * ```
    *
    * @remarks
-   * **Firebird quirk:** Toda operação de escrita DEVE estar em uma transação.
+   * **Firebird quirk:** No Firebird, transações são obrigatórias para operações de escrita (INSERT, UPDATE, DELETE).
+   * Este método utiliza o nível de isolamento `READ_COMMITTED`.
    */
   async transaction<R>(fn: (transaction: any) => Promise<R>): Promise<R> {
     return new Promise((resolve, reject) => {
@@ -87,11 +106,17 @@ export class FirebirdConnection {
   }
 
   /**
-   * Executa uma query SQL diretamente.
+   * Executa uma query SQL arbitrária diretamente no banco de dados.
+   * Ideal para SELECTs complexos ou comandos que não se encaixam no modelo de repositório.
+   *
+   * @template T - Tipo esperado para os objetos retornados.
+   * @param sql - String SQL com placeholders `?`.
+   * @param params - Lista de parâmetros para a query.
+   * @returns Uma Promise que resolve em um array com os resultados da query.
    *
    * @example
    * ```typescript
-   * const results = await connection.query('SELECT * FROM USERS WHERE ID = ?', [1]);
+   * const rawUsers = await connection.query('SELECT ID, NOME FROM USUARIOS WHERE ATIVO = ?', [1]);
    * ```
    */
   async query<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
@@ -115,7 +140,8 @@ export class FirebirdConnection {
   }
 
   /**
-   * Fecha o pool de conexões.
+   * Encerra todas as conexões do pool de forma segura.
+   * Deve ser chamado ao finalizar a aplicação para liberar recursos do servidor.
    *
    * @example
    * ```typescript
@@ -136,16 +162,19 @@ export class FirebirdConnection {
 }
 
 /**
- * Cria uma nova conexão com o banco de dados Firebird.
+ * Função de fábrica para criar e inicializar uma nova `FirebirdConnection`.
+ *
+ * @param options - Configurações de acesso ao banco (host, database, user, password, etc).
+ * @returns Uma Promise que resolve na nova instância de conexão.
  *
  * @example
  * ```typescript
  * const connection = await createConnection({
- *   host: 'localhost',
- *   database: 'test',
+ *   host: '127.0.0.1',
+ *   port: 3050,
+ *   database: 'main_db',
  *   user: 'SYSDBA',
- *   password: 'masterkey',
- *   port: 3050
+ *   password: 'masterkey'
  * });
  * ```
  */
