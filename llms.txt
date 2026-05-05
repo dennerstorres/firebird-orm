@@ -1,0 +1,77 @@
+# Firebird ORM
+
+A simple and typed ORM for Firebird 2.5+ and 3.0+ using TypeScript.
+Provides a familiar Repository pattern and decorators to map entities to Firebird tables.
+
+## Firebird Quirks & SQL Examples
+
+- **Pagination**: Firebird uses `FIRST` and `SKIP` instead of `LIMIT` and `OFFSET`.
+  - SQL: `SELECT FIRST 10 SKIP 20 * FROM TABLE`
+- **Generated IDs**: Firebird doesn't have `AUTO_INCREMENT`. Use sequences (generators).
+  - SQL: `SELECT NEXT VALUE FOR GEN_TABLE_ID FROM RDB$DATABASE`
+- **Insert with ID**: Use `RETURNING` at the end of the INSERT statement to capture the generated ID.
+  - SQL: `INSERT INTO T (COLS) VALUES (?) RETURNING ID`
+- **Empty Strings**: Firebird 2.5 treats `''` as `NULL`. Avoid using empty strings for mandatory fields.
+- **Booleans**: Firebird 2.5 does not have a native `BOOLEAN` type. Use `SMALLINT` with values 0 (false) and 1 (true).
+- **Case Sensitivity**: Unquoted names are automatically converted to UPPERCASE internally.
+  - ORM Convention: Always send table and column names in UPPERCASE to avoid mismatch issues.
+- **Transactions**: Every operation needs an active transaction. The ORM handles this in the Repository methods.
+
+## Usage Examples
+
+### Correct Usage
+
+```typescript
+@Entity('USUARIOS')
+class Usuario {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  nome: string;
+}
+
+const repo = await connection.getRepository(Usuario);
+const user = await repo.findOne(1);
+const newUser = await repo.save({ nome: 'João Silva' }); // Automatically handles sequence and returns saved entity
+```
+
+### Incorrect Usage
+
+```typescript
+// Incorrect: Using LIMIT/OFFSET in raw queries (if used outside ORM)
+// Firebird will throw a syntax error.
+const sql = "SELECT * FROM USUARIOS LIMIT 10";
+
+// Incorrect: Manually concatenating values in queries (SQL Injection risk)
+const sql = `SELECT * FROM USUARIOS WHERE NOME = '${nome}'`;
+
+// Incorrect: Forgetting @PrimaryColumn or @PrimaryGeneratedColumn
+@Entity('TEST')
+class Test {
+  @Column()
+  id: number; // Will throw NoPrimaryKeyError when used in Repository
+}
+```
+
+## Common Errors & Solutions
+
+- **`NoPrimaryKeyError`**: The entity is missing a primary key decorator.
+  - *Solution*: Add `@PrimaryGeneratedColumn()` (for auto-increment) or `@PrimaryColumn()` (for manual IDs) to your PK property.
+- **`EntityNotFoundError`**: `findOneOrFail` did not find a record with the provided ID.
+  - *Solution*: Ensure the ID exists in the database or use `findOne` which returns `null` instead of throwing.
+- **`FirebirdOrmError: A classe X não é uma entidade válida`**: The class passed to `getRepository` is missing the `@Entity` decorator.
+  - *Solution*: Add `@Entity('TABLE_NAME')` to your class definition.
+
+## Equivalency Table
+
+| MySQL / PostgreSQL | Firebird |
+|-------------------|----------|
+| `LIMIT 10` | `FIRST 10` |
+| `OFFSET 20` | `SKIP 20` |
+| `AUTO_INCREMENT` / `SERIAL` | `SEQUENCE` (Generator) + `NEXT VALUE FOR` |
+| `LAST_INSERT_ID()` / `RETURNING ID` | `INSERT ... RETURNING ID` |
+| `BOOLEAN` | `SMALLINT` (0 or 1) |
+| `NOW()` | `CURRENT_TIMESTAMP` |
+| `VARCHAR(255)` | `VARCHAR(255)` |
+| `TEXT` | `BLOB SUB_TYPE TEXT` |
