@@ -1,3 +1,4 @@
+import * as Firebird from 'node-firebird';
 import { QueryBuilder } from './query-builder';
 import { getTableName, getColumnMetadata, getPrimaryColumn } from './decorators';
 import { FindOptions, EntityNotFoundError, ColumnMetadata } from './types';
@@ -360,4 +361,3 @@ export class Repository<T> {
   }
 }
 
-import * as Firebird from 'node-firebird';
