@@ -39,6 +39,10 @@ export interface PrimaryGeneratedColumnOptions {
  *   id: number;
  * }
  * ```
+ *
+ * @remarks
+ * **Firebird quirk:** Nomes de tabela sem aspas são convertidos para MAIÚSCULO internamente no Firebird.
+ * O ORM armazena o nome da tabela sempre em MAIÚSCULO para garantir consistência.
  */
 export function Entity(tableName: string): ClassDecorator {
   return (target: Function) => {
@@ -59,6 +63,10 @@ export function Entity(tableName: string): ClassDecorator {
  * @Column()
  * email: string; // vira EMAIL no banco
  * ```
+ *
+ * @remarks
+ * **Firebird quirk:** O nome da coluna é convertido para MAIÚSCULO ao ser enviado para o banco.
+ * Se omitido, o nome da propriedade na classe é usado como nome da coluna em MAIÚSCULO.
  */
 export function Column(options: ColumnOptions = {}): PropertyDecorator {
   return (target: Object, propertyKey: string | symbol) => {
@@ -89,6 +97,10 @@ export function Column(options: ColumnOptions = {}): PropertyDecorator {
  * @PrimaryGeneratedColumn({ sequenceName: 'SEQ_USER_ID' })
  * id: number;
  * ```
+ *
+ * @remarks
+ * **Firebird quirk:** O Firebird não possui AUTO_INCREMENT. É necessário usar Sequences e Triggers
+ * ou buscar o próximo valor manualmente. Este ORM busca via `SELECT NEXT VALUE FOR`.
  */
 export function PrimaryGeneratedColumn(options: PrimaryGeneratedColumnOptions = {}): PropertyDecorator {
   return (target: Object, propertyKey: string | symbol) => {
@@ -118,6 +130,9 @@ export function PrimaryGeneratedColumn(options: PrimaryGeneratedColumnOptions = 
  * @PrimaryColumn({ name: 'COD_SISTEMA' })
  * code: string;
  * ```
+ *
+ * @remarks
+ * **Firebird quirk:** O nome da coluna é convertido para MAIÚSCULO.
  */
 export function PrimaryColumn(options: ColumnOptions = {}): PropertyDecorator {
   return (target: Object, propertyKey: string | symbol) => {

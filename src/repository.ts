@@ -129,12 +129,16 @@ export class Repository<T> {
    * Encontra todas as entidades que satisfazem as condições de busca.
    *
    * @param options - Opções de busca (where, orderBy, take, skip, select).
-   * @returns Array de entidades.
+   * @returns Array de instâncias da entidade.
    *
    * @example
    * ```typescript
    * const users = await repo.find({ where: { active: true }, take: 10 });
    * ```
+   *
+   * @remarks
+   * **Firebird quirk:** Utiliza `FIRST` e `SKIP` para paginação baseada em `take` e `skip`.
+   * Nomes de colunas retornados pelo banco em MAIÚSCULO são mapeados para camelCase.
    */
   async find(options: FindOptions<T> = {}): Promise<T[]> {
     const tableName = getTableName(this.EntityClass);
@@ -228,13 +232,19 @@ export class Repository<T> {
    * caso contrário, realiza um INSERT gerando um novo ID via Sequence.
    *
    * @param entity - Dados da entidade a serem salvos.
-   * @returns A entidade salva e atualizada (incluindo ID gerado).
+   * @returns A instância da entidade salva e atualizada (incluindo ID gerado).
+   * @throws NoPrimaryKeyError se a entidade não tiver PK definida.
    *
    * @example
    * ```typescript
    * const newUser = await repo.save({ name: 'John Doe' });
    * const updatedUser = await repo.save({ id: 1, name: 'John Updated' });
    * ```
+   *
+   * @remarks
+   * **Firebird quirk:** Toda operação de escrita é executada dentro de uma transação.
+   * Se for um INSERT e a PK for auto-gerada, o ORM busca o próximo valor da Sequence
+   * antes de inserir e utiliza a cláusula `RETURNING` para garantir a captura do ID.
    */
   async save(entity: Partial<T>): Promise<T> {
     const pk = getPrimaryColumn(this.EntityClass);
@@ -278,11 +288,15 @@ export class Repository<T> {
    *
    * @param id - Valor da chave primária.
    * @param data - Dados a serem atualizados.
+   * @throws NoPrimaryKeyError se a entidade não tiver PK definida.
    *
    * @example
    * ```typescript
    * await repo.update(1, { active: false });
    * ```
+   *
+   * @remarks
+   * **Firebird quirk:** Executado dentro de uma transação.
    */
   async update(id: number | string, data: Partial<T>): Promise<void> {
     const pk = getPrimaryColumn(this.EntityClass);
@@ -309,11 +323,15 @@ export class Repository<T> {
    * Remove uma entidade pelo seu ID.
    *
    * @param id - Valor da chave primária.
+   * @throws NoPrimaryKeyError se a entidade não tiver PK definida.
    *
    * @example
    * ```typescript
    * await repo.delete(1);
    * ```
+   *
+   * @remarks
+   * **Firebird quirk:** Executado dentro de uma transação.
    */
   async delete(id: number | string): Promise<void> {
     const pk = getPrimaryColumn(this.EntityClass);
@@ -330,7 +348,7 @@ export class Repository<T> {
    * Conta a quantidade de registros que satisfazem as condições.
    *
    * @param where - Filtros da busca.
-   * @returns Quantidade de registros.
+   * @returns Quantidade total de registros.
    *
    * @example
    * ```typescript

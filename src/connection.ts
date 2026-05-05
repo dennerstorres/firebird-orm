@@ -89,10 +89,17 @@ export class FirebirdConnection {
   /**
    * Executa uma query SQL diretamente.
    *
+   * @param sql - String SQL com placeholders `?`.
+   * @param params - Array de parâmetros para a query.
+   * @returns Array de resultados da query.
+   *
    * @example
    * ```typescript
    * const results = await connection.query('SELECT * FROM USERS WHERE ID = ?', [1]);
    * ```
+   *
+   * @remarks
+   * **Firebird quirk:** Nomes de colunas no resultado estarão em MAIÚSCULO, a menos que apelidados com aspas.
    */
   async query<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
     return new Promise((resolve, reject) => {
@@ -115,7 +122,9 @@ export class FirebirdConnection {
   }
 
   /**
-   * Fecha o pool de conexões.
+   * Fecha o pool de conexões e libera todos os recursos.
+   *
+   * @returns Promise que resolve quando o pool for destruído.
    *
    * @example
    * ```typescript
@@ -136,7 +145,10 @@ export class FirebirdConnection {
 }
 
 /**
- * Cria uma nova conexão com o banco de dados Firebird.
+ * Cria uma nova conexão com o banco de dados Firebird e inicializa o pool.
+ *
+ * @param options - Opções de configuração da conexão.
+ * @returns Instância de FirebirdConnection pronta para uso.
  *
  * @example
  * ```typescript

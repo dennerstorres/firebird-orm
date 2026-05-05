@@ -32,7 +32,13 @@ export interface FirebirdConnectionOptions {
   role?: string;
   /** Tamanho da página */
   pageSize?: number;
-  /** Se deve converter chaves para minúsculo no retorno do driver (não recomendado pelo ORM) */
+  /**
+   * Se deve converter chaves para minúsculo no retorno do driver.
+   *
+   * @remarks
+   * **Firebird quirk:** O Firebird retorna nomes em MAIÚSCULO por padrão.
+   * Esta opção não é recomendada pois o ORM espera nomes em MAIÚSCULO para o mapeamento.
+   */
   lowercase_keys?: boolean;
 }
 
@@ -112,6 +118,9 @@ export interface ColumnMetadata {
  * ```
  */
 export class FirebirdOrmError extends Error {
+  /**
+   * @param message - Mensagem de erro.
+   */
   constructor(message: string) {
     super(`[firebird-orm] ${message}`);
     this.name = 'FirebirdOrmError';
@@ -127,6 +136,10 @@ export class FirebirdOrmError extends Error {
  * ```
  */
 export class EntityNotFoundError extends FirebirdOrmError {
+  /**
+   * @param entityName - Nome da entidade.
+   * @param id - ID da entidade que não foi encontrada.
+   */
   constructor(entityName: string, id?: string | number | unknown) {
     super(`Entidade "${entityName}"${id !== undefined ? ` com ID ${id}` : ''} não encontrada.`);
     this.name = 'EntityNotFoundError';
@@ -142,6 +155,9 @@ export class EntityNotFoundError extends FirebirdOrmError {
  * ```
  */
 export class NoPrimaryKeyError extends FirebirdOrmError {
+  /**
+   * @param entityName - Nome da entidade.
+   */
   constructor(entityName: string) {
     super(`A entidade "${entityName}" não possui uma chave primária definida. Use @PrimaryColumn ou @PrimaryGeneratedColumn.`);
     this.name = 'NoPrimaryKeyError';

@@ -12,7 +12,7 @@ export class QueryBuilder {
    * @param orderBy - Ordenação dos resultados (opcional).
    * @param take - Quantidade de registros a retornar (opcional).
    * @param skip - Quantidade de registros a pular (opcional).
-   * @returns SQL gerado e parâmetros.
+   * @returns Objeto contendo o SQL gerado e os parâmetros para execução.
    *
    * @example
    * ```typescript
@@ -79,7 +79,7 @@ export class QueryBuilder {
    * @param columns - Colunas para inserção.
    * @param values - Valores a serem inseridos.
    * @param pkColumn - Nome da coluna de chave primária para a cláusula RETURNING (opcional).
-   * @returns SQL gerado e parâmetros.
+   * @returns Objeto contendo o SQL gerado e os parâmetros para execução.
    *
    * @example
    * ```typescript
@@ -121,7 +121,7 @@ export class QueryBuilder {
    * @param sets - Campos e valores a serem atualizados.
    * @param pkColumn - Nome da coluna de chave primária.
    * @param pkValue - Valor da chave primária.
-   * @returns SQL gerado e parâmetros.
+   * @returns Objeto contendo o SQL gerado e os parâmetros para execução.
    *
    * @example
    * ```typescript
@@ -159,7 +159,7 @@ export class QueryBuilder {
    * @param tableName - Nome da tabela.
    * @param pkColumn - Nome da coluna de chave primária.
    * @param pkValue - Valor da chave primária.
-   * @returns SQL gerado e parâmetros.
+   * @returns Objeto contendo o SQL gerado e os parâmetros para execução.
    *
    * @example
    * ```typescript
@@ -182,7 +182,7 @@ export class QueryBuilder {
    *
    * @param tableName - Nome da tabela.
    * @param where - Filtros da busca (opcional).
-   * @returns SQL gerado e parâmetros.
+   * @returns Objeto contendo o SQL gerado e os parâmetros para execução.
    *
    * @example
    * ```typescript
