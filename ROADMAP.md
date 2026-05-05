@@ -377,7 +377,7 @@ V1 → V2 → V3 → V4              (features — após Q1)
 | F4 | Repository | [x] |
 | F5 | Connection e createConnection | [x] |
 | F6 | Barrel export + index.ts | [x] |
-| A1 | Arquivo llms.txt | [~] |
+| A1 | Arquivo llms.txt | [x] |
 | A2 | JSDoc completo | [ ] |
 | A3 | Exemplos inline | [ ] |
 | A4 | Mensagens de erro acionáveis | [ ] |
