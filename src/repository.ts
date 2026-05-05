@@ -4,14 +4,15 @@ import { getTableName, getColumnMetadata, getPrimaryColumn } from './decorators'
 import { FindOptions, EntityNotFoundError, ColumnMetadata } from './types';
 
 /**
- * Repositório genérico para operações CRUD em entidades do Firebird.
+ * Repositório genérico para realizar operações CRUD (Create, Read, Update, Delete)
+ * em entidades do banco de dados Firebird.
  *
- * @template T - Tipo da entidade.
+ * @template T - Tipo da classe de entidade.
  *
  * @example
  * ```typescript
- * const repo = connection.getRepository(User);
- * const user = await repo.findOne(1);
+ * const userRepository = connection.getRepository(User);
+ * const activeUsers = await userRepository.find({ where: { active: true } });
  * ```
  */
 export class Repository<T> {
@@ -19,6 +20,8 @@ export class Repository<T> {
 
   /**
    * @internal
+   * @param pool - Pool de conexões do node-firebird.
+   * @param EntityClass - Classe da entidade associada a este repositório.
    */
   constructor(
     private readonly pool: any,
@@ -26,18 +29,23 @@ export class Repository<T> {
   ) {}
 
   /**
-   * Executa uma função dentro de uma transação.
+   * Executa um conjunto de operações dentro de uma transação Firebird.
+   * Garante a atomicidade das operações de escrita.
    *
-   * @param fn - Função a ser executada.
-   * @returns Resultado da função.
+   * @param fn - Função assíncrona que recebe o objeto de transação do driver.
+   * @returns O resultado retornado pela função `fn`.
    *
    * @example
    * ```typescript
-   * await repository.executeInTransaction(async (db) => {
-   *   await db.query(sql1);
-   *   await db.query(sql2);
+   * await repository.executeInTransaction(async (transaction) => {
+   *   await repository.queryAsync(transaction, 'UPDATE ...');
+   *   await repository.queryAsync(transaction, 'INSERT ...');
    * });
    * ```
+   *
+   * @remarks
+   * **Firebird quirk:** O Firebird exige transações explícitas para manter a integridade dos dados,
+   * especialmente em ambientes concorrentes. Este ORM utiliza `ISOLATION_READ_COMMITTED` por padrão.
    */
   private async executeInTransaction<R>(fn: (db: any) => Promise<R>): Promise<R> {
     return new Promise((resolve, reject) => {
@@ -69,12 +77,12 @@ export class Repository<T> {
   }
 
   /**
-   * Promisifica a execução de uma query no node-firebird.
+   * Wrapper para executar queries SQL usando Promises.
    *
-   * @param connection - Conexão ou Transação do node-firebird.
-   * @param sql - Query SQL.
-   * @param params - Parâmetros da query.
-   * @returns Resultados da query.
+   * @param connection - Instância de conexão ou transação do node-firebird.
+   * @param sql - String SQL com placeholders `?`.
+   * @param params - Array de parâmetros para substituir os placeholders.
+   * @returns Array de resultados da query.
    */
   private async queryAsync<R = any>(connection: any, sql: string, params: unknown[] = []): Promise<R[]> {
     return new Promise((resolve, reject) => {
@@ -86,10 +94,11 @@ export class Repository<T> {
   }
 
   /**
-   * Mapeia uma linha do banco de dados para uma instância da entidade.
+   * Converte uma linha bruta retornada pelo driver para uma instância da classe da entidade,
+   * mapeando as colunas em UPPERCASE para as propriedades da classe.
    *
-   * @param row - Linha retornada pelo driver.
-   * @returns Instância da entidade.
+   * @param row - Objeto retornado pelo driver node-firebird.
+   * @returns Uma nova instância da entidade preenchida com os dados do banco.
    */
   private mapToEntity(row: any): T {
     const entity = new this.EntityClass();
@@ -106,10 +115,11 @@ export class Repository<T> {
   }
 
   /**
-   * Mapeia um objeto parcial da entidade para pares de coluna/valor do banco.
+   * Mapeia as propriedades de um objeto parcial da entidade para os nomes de colunas
+   * em MAIÚSCULO configurados via decorators.
    *
    * @param entity - Objeto parcial da entidade.
-   * @returns Objeto com chaves em UPPERCASE.
+   * @returns Objeto com chaves correspondentes aos nomes das colunas no banco.
    */
   private mapToColumns(entity: Partial<T>): Record<string, unknown> {
     const columns = getColumnMetadata(this.EntityClass);
@@ -126,15 +136,23 @@ export class Repository<T> {
   }
 
   /**
-   * Encontra todas as entidades que satisfazem as condições de busca.
+   * Busca múltiplos registros que atendam aos critérios especificados.
    *
-   * @param options - Opções de busca (where, orderBy, take, skip, select).
-   * @returns Array de entidades.
+   * @param options - Opções de filtro, ordenação e paginação.
+   * @returns Uma Promise que resolve em um array de instâncias da entidade.
    *
    * @example
    * ```typescript
-   * const users = await repo.find({ where: { active: true }, take: 10 });
+   * const users = await repo.find({
+   *   where: { active: true },
+   *   orderBy: { name: 'ASC' },
+   *   take: 10
+   * });
    * ```
+   *
+   * @remarks
+   * **Firebird quirk:** A paginação é implementada usando as cláusulas `FIRST` e `SKIP`
+   * no SQL gerado.
    */
   async find(options: FindOptions<T> = {}): Promise<T[]> {
     const tableName = getTableName(this.EntityClass);
@@ -183,10 +201,10 @@ export class Repository<T> {
   }
 
   /**
-   * Encontra uma única entidade pelo seu ID.
+   * Busca uma única entidade pelo valor da sua chave primária.
    *
-   * @param id - Valor da chave primária.
-   * @returns A entidade encontrada ou null.
+   * @param id - Valor do ID (número ou string).
+   * @returns A entidade encontrada ou `null` caso não exista.
    *
    * @example
    * ```typescript
@@ -204,15 +222,15 @@ export class Repository<T> {
   }
 
   /**
-   * Encontra uma única entidade pelo seu ID ou lança erro se não encontrar.
+   * Busca uma única entidade pelo ID e lança um erro caso não seja encontrada.
    *
-   * @param id - Valor da chave primária.
+   * @param id - Valor do ID.
    * @returns A entidade encontrada.
-   * @throws EntityNotFoundError
+   * @throws EntityNotFoundError - Se nenhum registro for encontrado.
    *
    * @example
    * ```typescript
-   * const user = await repo.findOneOrFail(1);
+   * const user = await repo.findOneOrFail(5);
    * ```
    */
   async findOneOrFail(id: number | string): Promise<T> {
@@ -224,17 +242,25 @@ export class Repository<T> {
   }
 
   /**
-   * Salva uma entidade. Realiza um UPDATE se a chave primária estiver presente,
-   * caso contrário, realiza um INSERT gerando um novo ID via Sequence.
+   * Salva as alterações de uma entidade no banco de dados.
+   * Se o objeto possuir o valor da chave primária, realiza um UPDATE.
+   * Caso contrário, realiza um INSERT gerando um novo ID via Sequence.
    *
-   * @param entity - Dados da entidade a serem salvos.
-   * @returns A entidade salva e atualizada (incluindo ID gerado).
+   * @param entity - Objeto parcial contendo os dados a serem salvos.
+   * @returns A entidade atualizada com os dados do banco após o salvamento.
    *
    * @example
    * ```typescript
-   * const newUser = await repo.save({ name: 'John Doe' });
-   * const updatedUser = await repo.save({ id: 1, name: 'John Updated' });
+   * // Insert
+   * const newUser = await repo.save({ name: 'Alice' });
+   *
+   * // Update
+   * const updatedUser = await repo.save({ id: 1, name: 'Alice Updated' });
    * ```
+   *
+   * @remarks
+   * **Firebird quirk:** Para o INSERT, o ID é gerado usando `SELECT NEXT VALUE FOR sequence FROM RDB$DATABASE`
+   * antes da execução da query principal, garantindo que o objeto retornado contenha o novo ID.
    */
   async save(entity: Partial<T>): Promise<T> {
     const pk = getPrimaryColumn(this.EntityClass);
@@ -274,10 +300,10 @@ export class Repository<T> {
   }
 
   /**
-   * Atualiza uma entidade existente pelo seu ID.
+   * Atualiza dados de um registro existente baseado no seu ID.
    *
-   * @param id - Valor da chave primária.
-   * @param data - Dados a serem atualizados.
+   * @param id - Identificador do registro.
+   * @param data - Objeto parcial com as propriedades a serem alteradas.
    *
    * @example
    * ```typescript
@@ -306,9 +332,9 @@ export class Repository<T> {
   }
 
   /**
-   * Remove uma entidade pelo seu ID.
+   * Remove permanentemente um registro do banco de dados pelo seu ID.
    *
-   * @param id - Valor da chave primária.
+   * @param id - Identificador do registro a ser excluído.
    *
    * @example
    * ```typescript
@@ -327,14 +353,14 @@ export class Repository<T> {
   }
 
   /**
-   * Conta a quantidade de registros que satisfazem as condições.
+   * Conta a quantidade total de registros que satisfazem um determinado critério.
    *
-   * @param where - Filtros da busca.
-   * @returns Quantidade de registros.
+   * @param where - Critérios de filtro (opcional).
+   * @returns A quantidade de registros encontrados.
    *
    * @example
    * ```typescript
-   * const count = await repo.count({ active: true });
+   * const activeCount = await repo.count({ active: true });
    * ```
    */
   async count(where?: Partial<T>): Promise<number> {
@@ -360,4 +386,3 @@ export class Repository<T> {
     });
   }
 }
-

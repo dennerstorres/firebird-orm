@@ -32,12 +32,20 @@ export interface FirebirdConnectionOptions {
   role?: string;
   /** Tamanho da página */
   pageSize?: number;
-  /** Se deve converter chaves para minúsculo no retorno do driver (não recomendado pelo ORM) */
+  /**
+   * Se deve converter chaves para minúsculo no retorno do driver.
+   *
+   * @remarks
+   * **Firebird quirk:** Não recomendado pelo ORM, pois o mapeamento automático de entidades
+   * espera que as chaves retornadas pelo driver estejam em MAIÚSCULO.
+   */
   lowercase_keys?: boolean;
 }
 
 /**
- * Opções para busca de registros.
+ * Opções para busca de registros no repositório.
+ *
+ * @template T - Tipo da entidade.
  *
  * @example
  * ```typescript
@@ -45,37 +53,38 @@ export interface FirebirdConnectionOptions {
  *   where: { active: true },
  *   take: 10,
  *   skip: 20,
- *   orderBy: { name: 'ASC' }
+ *   orderBy: { name: 'ASC' },
+ *   select: ['id', 'name']
  * };
  * ```
  */
 export interface FindOptions<T> {
-  /** Filtros da busca */
+  /** Filtros da busca baseados nas propriedades da entidade. */
   where?: Partial<T>;
-  /** Ordenação dos resultados */
+  /** Ordenação dos resultados por propriedade. */
   orderBy?: {
     [K in keyof T]?: 'ASC' | 'DESC';
   };
   /**
-   * Quantidade de registros a retornar.
+   * Quantidade de registros a retornar (limite).
    *
    * @remarks
    * **Firebird quirk:** No Firebird, isso é convertido para a cláusula `FIRST`.
    */
   take?: number;
   /**
-   * Quantidade de registros a pular.
+   * Quantidade de registros a pular (offset).
    *
    * @remarks
    * **Firebird quirk:** No Firebird, isso é convertido para a cláusula `SKIP`.
    */
   skip?: number;
-  /** Colunas a serem selecionadas */
+  /** Lista de propriedades da entidade que devem ser selecionadas. */
   select?: (keyof T)[];
 }
 
 /**
- * Metadados de uma coluna da entidade.
+ * Metadados de uma coluna da entidade mapeada.
  *
  * @example
  * ```typescript
@@ -89,29 +98,32 @@ export interface FindOptions<T> {
  * ```
  */
 export interface ColumnMetadata {
-  /** Nome da propriedade na classe TypeScript */
+  /** Nome da propriedade na classe TypeScript. */
   propertyKey: string | symbol;
-  /** Nome da coluna no banco de dados (será convertido para MAIÚSCULO) */
+  /** Nome da coluna no banco de dados (armazenado em MAIÚSCULO). */
   columnName: string;
-  /** Indica se a coluna pode ser nula */
+  /** Indica se a coluna permite valores NULL. */
   nullable?: boolean;
-  /** Indica se é chave primária */
+  /** Indica se a coluna faz parte da chave primária. */
   primary?: boolean;
-  /** Indica se o valor é gerado automaticamente */
+  /** Indica se o valor da coluna é gerado automaticamente (ex: via Sequence). */
   generated?: boolean;
-  /** Nome da sequence usada para gerar o ID (se aplicável) */
+  /** Nome da sequence usada para gerar o ID (relevante apenas se `generated` for true). */
   sequenceName?: string;
 }
 
 /**
- * Erro base do ORM.
+ * Erro base lançado pelo Firebird ORM.
  *
  * @example
  * ```typescript
- * throw new FirebirdOrmError('Algo deu errado');
+ * throw new FirebirdOrmError('Conexão perdida com o banco');
  * ```
  */
 export class FirebirdOrmError extends Error {
+  /**
+   * @param message - Mensagem detalhada do erro.
+   */
   constructor(message: string) {
     super(`[firebird-orm] ${message}`);
     this.name = 'FirebirdOrmError';
@@ -119,14 +131,18 @@ export class FirebirdOrmError extends Error {
 }
 
 /**
- * Erro lançado quando uma entidade não é encontrada.
+ * Erro lançado quando uma operação espera encontrar uma entidade mas ela não existe.
  *
  * @example
  * ```typescript
- * throw new EntityNotFoundError('User', 1);
+ * throw new EntityNotFoundError('User', 123);
  * ```
  */
 export class EntityNotFoundError extends FirebirdOrmError {
+  /**
+   * @param entityName - Nome da classe da entidade.
+   * @param id - Identificador que foi buscado (opcional).
+   */
   constructor(entityName: string, id?: string | number | unknown) {
     super(`Entidade "${entityName}"${id !== undefined ? ` com ID ${id}` : ''} não encontrada.`);
     this.name = 'EntityNotFoundError';
@@ -134,7 +150,7 @@ export class EntityNotFoundError extends FirebirdOrmError {
 }
 
 /**
- * Erro lançado quando uma entidade não possui chave primária definida.
+ * Erro lançado quando uma entidade é utilizada sem ter uma chave primária definida.
  *
  * @example
  * ```typescript
@@ -142,6 +158,9 @@ export class EntityNotFoundError extends FirebirdOrmError {
  * ```
  */
 export class NoPrimaryKeyError extends FirebirdOrmError {
+  /**
+   * @param entityName - Nome da classe da entidade sem PK.
+   */
   constructor(entityName: string) {
     super(`A entidade "${entityName}" não possui uma chave primária definida. Use @PrimaryColumn ou @PrimaryGeneratedColumn.`);
     this.name = 'NoPrimaryKeyError';

@@ -7,29 +7,40 @@ export const ENTITY_METADATA_KEY = Symbol('entity');
 export const COLUMN_METADATA_KEY = Symbol('column');
 
 /**
- * Opções para a coluna.
+ * Opções de configuração para uma coluna de entidade.
  */
 export interface ColumnOptions {
-  /** Nome da coluna no banco de dados. Se omitido, usa o nome da propriedade em MAIÚSCULO. */
+  /**
+   * Nome da coluna no banco de dados.
+   * Se omitido, utiliza o nome da propriedade da classe convertido para MAIÚSCULO.
+   */
   name?: string;
-  /** Se a coluna pode ser nula. */
+  /**
+   * Define se a coluna permite valores nulos (NULL).
+   */
   nullable?: boolean;
 }
 
 /**
- * Opções para coluna de chave primária gerada.
+ * Opções de configuração para uma coluna de chave primária com geração automática.
  */
 export interface PrimaryGeneratedColumnOptions {
-  /** Nome da coluna no banco de dados. Se omitido, usa o nome da propriedade em MAIÚSCULO. */
+  /**
+   * Nome da coluna no banco de dados.
+   * Se omitido, utiliza o nome da propriedade da classe convertido para MAIÚSCULO.
+   */
   name?: string;
-  /** Nome da sequence. Se omitido, usa o padrão GEN_{TABELA}_{COLUNA}. */
+  /**
+   * Nome da sequence do Firebird usada para gerar o valor da chave.
+   * Se omitido, segue o padrão: `GEN_{TABELA}_{COLUNA}`.
+   */
   sequenceName?: string;
 }
 
 /**
- * Decorator que marca uma classe como uma entidade do Firebird.
+ * Decorator que marca uma classe como uma entidade persistível no Firebird.
  *
- * @param tableName - Nome da tabela no banco de dados.
+ * @param tableName - Nome da tabela no banco de dados. Será convertido para MAIÚSCULO.
  *
  * @example
  * ```typescript
@@ -47,17 +58,19 @@ export function Entity(tableName: string): ClassDecorator {
 }
 
 /**
- * Decorator que marca uma propriedade como uma coluna comum.
+ * Decorator que marca uma propriedade da classe como uma coluna comum no banco de dados.
  *
- * @param options - Opções de configuração da coluna.
+ * @param options - Opções de configuração da coluna (opcional).
  *
  * @example
  * ```typescript
- * @Column({ name: 'NOME_COMPLETO', nullable: false })
- * name: string;
+ * class Usuario {
+ *   @Column({ name: 'NOME_COMPLETO', nullable: false })
+ *   name: string;
  *
- * @Column()
- * email: string; // vira EMAIL no banco
+ *   @Column()
+ *   email: string; // Vira a coluna 'EMAIL' no banco
+ * }
  * ```
  */
 export function Column(options: ColumnOptions = {}): PropertyDecorator {
@@ -77,18 +90,24 @@ export function Column(options: ColumnOptions = {}): PropertyDecorator {
 }
 
 /**
- * Decorator para chave primária com geração automática via Sequence.
+ * Decorator para definir a chave primária da entidade com geração automática de valor via Sequence.
  *
- * @param options - Opções de configuração da PK e Sequence.
+ * @param options - Opções de configuração da chave primária e da sequence (opcional).
  *
  * @example
  * ```typescript
- * @PrimaryGeneratedColumn()
- * id: number; // sequence padrão: GEN_TABELA_ID
+ * class Usuario {
+ *   @PrimaryGeneratedColumn()
+ *   id: number; // Sequence padrão: GEN_USUARIOS_ID
  *
- * @PrimaryGeneratedColumn({ sequenceName: 'SEQ_USER_ID' })
- * id: number;
+ *   @PrimaryGeneratedColumn({ sequenceName: 'SEQ_USER_ID' })
+ *   otherId: number;
+ * }
  * ```
+ *
+ * @remarks
+ * **Firebird quirk:** No Firebird, o valor é obtido via `GEN_ID(sequence, 1)` ou `NEXT VALUE FOR sequence`
+ * antes da inserção, ou via `RETURNING` na cláusula `INSERT`.
  */
 export function PrimaryGeneratedColumn(options: PrimaryGeneratedColumnOptions = {}): PropertyDecorator {
   return (target: Object, propertyKey: string | symbol) => {
@@ -109,14 +128,16 @@ export function PrimaryGeneratedColumn(options: PrimaryGeneratedColumnOptions = 
 }
 
 /**
- * Decorator para chave primária manual (sem sequence).
+ * Decorator para definir uma chave primária manual (onde o valor deve ser fornecido pela aplicação).
  *
- * @param options - Opções de configuração da coluna.
+ * @param options - Opções de configuração da coluna de chave primária (opcional).
  *
  * @example
  * ```typescript
- * @PrimaryColumn({ name: 'COD_SISTEMA' })
- * code: string;
+ * class Configuracao {
+ *   @PrimaryColumn({ name: 'CHAVE_CONFIG' })
+ *   key: string;
+ * }
  * ```
  */
 export function PrimaryColumn(options: ColumnOptions = {}): PropertyDecorator {
@@ -136,15 +157,15 @@ export function PrimaryColumn(options: ColumnOptions = {}): PropertyDecorator {
 }
 
 /**
- * Helper para obter o nome da tabela registrado em uma entidade.
+ * Helper para obter o nome da tabela registrado via `@Entity` em uma classe.
  *
- * @param target - Classe da entidade.
+ * @param target - Classe da entidade que possui o decorator `@Entity`.
  * @returns O nome da tabela em MAIÚSCULO.
- * @throws Erro se a classe não tiver o decorator @Entity.
+ * @throws Erro se a classe não possuir o metadado de entidade.
  *
  * @example
  * ```typescript
- * const table = getTableName(Usuario); // 'USUARIOS'
+ * const table = getTableName(Usuario); // Retorna 'USUARIOS'
  * ```
  */
 export function getTableName(target: Function): string {
@@ -156,14 +177,15 @@ export function getTableName(target: Function): string {
 }
 
 /**
- * Helper para obter todos os metadados de colunas de uma entidade.
+ * Helper para extrair todos os metadados de colunas definidos em uma classe de entidade.
+ * Resolve automaticamente os nomes de sequences padrão para colunas geradas.
  *
  * @param target - Classe da entidade.
- * @returns Array com os metadados de todas as colunas.
+ * @returns Um array contendo os metadados de todas as colunas encontradas.
  *
  * @example
  * ```typescript
- * const meta = getColumnMetadata(Usuario);
+ * const columns = getColumnMetadata(Usuario);
  * ```
  */
 export function getColumnMetadata(target: Function): ColumnMetadata[] {
@@ -183,15 +205,16 @@ export function getColumnMetadata(target: Function): ColumnMetadata[] {
 }
 
 /**
- * Helper para obter o metadado da chave primária de uma entidade.
+ * Helper para obter o metadado da coluna que foi definida como chave primária na entidade.
  *
  * @param target - Classe da entidade.
- * @returns Metadado da coluna PK.
- * @throws NoPrimaryKeyError se não houver coluna PK definida.
+ * @returns O metadado da coluna PK.
+ * @throws NoPrimaryKeyError se nenhuma coluna for marcada como PK.
  *
  * @example
  * ```typescript
  * const pk = getPrimaryColumn(Usuario);
+ * console.log(pk.columnName); // 'ID'
  * ```
  */
 export function getPrimaryColumn(target: Function): ColumnMetadata {
