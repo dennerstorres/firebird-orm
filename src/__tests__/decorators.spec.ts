@@ -32,7 +32,7 @@ describe('Decorators', () => {
     });
 
     it('should throw error if class is not an entity', () => {
-      expect(() => getTableName(NotAnEntity)).toThrow('[firebird-orm] A classe NotAnEntity não é uma entidade válida.');
+      expect(() => getTableName(NotAnEntity)).toThrow(/A classe "NotAnEntity" não é uma entidade válida/);
     });
   });
 

@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { ColumnMetadata, NoPrimaryKeyError } from './types';
+import { ColumnMetadata, NoPrimaryKeyError, FirebirdOrmError } from './types';
 
 /** @internal */
 export const ENTITY_METADATA_KEY = Symbol('entity');
@@ -171,7 +171,13 @@ export function PrimaryColumn(options: ColumnOptions = {}): PropertyDecorator {
 export function getTableName(target: Function): string {
   const tableName = Reflect.getMetadata(ENTITY_METADATA_KEY, target);
   if (!tableName) {
-    throw new Error(`[firebird-orm] A classe ${target.name} não é uma entidade válida. Adicione @Entity('TABELA').`);
+    throw new FirebirdOrmError(
+      `A classe "${target.name}" não é uma entidade válida.\n` +
+      `Adicione o decorator @Entity('NOME_DA_TABELA') no topo da classe.\n\n` +
+      `Exemplo:\n` +
+      `  @Entity('${target.name.toUpperCase()}')\n` +
+      `  class ${target.name} { ... }`
+    );
   }
   return tableName;
 }
