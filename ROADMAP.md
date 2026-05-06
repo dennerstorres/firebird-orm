@@ -380,7 +380,7 @@ V1 → V2 → V3 → V4              (features — após Q1)
 | A1 | Arquivo llms.txt | [x] |
 | A2 | JSDoc completo | [x] |
 | A3 | Exemplos inline | [x] |
-| A4 | Mensagens de erro acionáveis | [~] |
+| A4 | Mensagens de erro acionáveis | [x] |
 | Q1 | Testes de integração com Docker | [ ] |
 | Q2 | GitHub Actions CI | [ ] |
 | Q3 | CONTRIBUTING.md | [ ] |
