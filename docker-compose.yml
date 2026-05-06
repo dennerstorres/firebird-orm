@@ -1,0 +1,8 @@
+services:
+  firebird:
+    image: jacobalberty/firebird:3.0
+    environment:
+      ISC_PASSWORD: masterkey
+      FIREBIRD_DATABASE: test.fdb
+    ports:
+      - "3050:3050"
