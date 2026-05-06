@@ -144,7 +144,10 @@ export class EntityNotFoundError extends FirebirdOrmError {
    * @param id - Identificador que foi buscado (opcional).
    */
   constructor(entityName: string, id?: string | number | unknown) {
-    super(`Entidade "${entityName}"${id !== undefined ? ` com ID ${id}` : ''} não encontrada.`);
+    super(
+      `Entidade "${entityName}"${id !== undefined ? ` com ID ${id}` : ''} não encontrada.\n` +
+      `Verifique se o registro existe no banco de dados e se as colunas estão mapeadas corretamente.`
+    );
     this.name = 'EntityNotFoundError';
   }
 }
@@ -162,7 +165,13 @@ export class NoPrimaryKeyError extends FirebirdOrmError {
    * @param entityName - Nome da classe da entidade sem PK.
    */
   constructor(entityName: string) {
-    super(`A entidade "${entityName}" não possui uma chave primária definida. Use @PrimaryColumn ou @PrimaryGeneratedColumn.`);
+    super(
+      `A entidade "${entityName}" não possui uma chave primária definida.\n` +
+      `Adicione @PrimaryColumn ou @PrimaryGeneratedColumn na propriedade de chave primária.\n\n` +
+      `Exemplo:\n` +
+      `  @PrimaryGeneratedColumn()\n` +
+      `  id: number;`
+    );
     this.name = 'NoPrimaryKeyError';
   }
 }
