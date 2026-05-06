@@ -381,7 +381,7 @@ V1 → V2 → V3 → V4              (features — após Q1)
 | A2 | JSDoc completo | [x] |
 | A3 | Exemplos inline | [x] |
 | A4 | Mensagens de erro acionáveis | [x] |
-| Q1 | Testes de integração com Docker | [~] |
+| Q1 | Testes de integração com Docker | [x] |
 | Q2 | GitHub Actions CI | [ ] |
 | Q3 | CONTRIBUTING.md | [ ] |
 | Q4 | Changelog e versionamento | [ ] |
