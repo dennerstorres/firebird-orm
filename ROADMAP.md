@@ -379,7 +379,7 @@ V1 → V2 → V3 → V4              (features — após Q1)
 | F6 | Barrel export + index.ts | [x] |
 | A1 | Arquivo llms.txt | [x] |
 | A2 | JSDoc completo | [x] |
-| A3 | Exemplos inline | [ ] |
+| A3 | Exemplos inline | [~] |
 | A4 | Mensagens de erro acionáveis | [ ] |
 | Q1 | Testes de integração com Docker | [ ] |
 | Q2 | GitHub Actions CI | [ ] |
