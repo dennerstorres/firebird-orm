@@ -146,7 +146,8 @@ export class Repository<T> {
    * const users = await repo.find({
    *   where: { active: true },
    *   orderBy: { name: 'ASC' },
-   *   take: 10
+   *   take: 10,
+   *   skip: 0
    * });
    * ```
    *
@@ -251,10 +252,10 @@ export class Repository<T> {
    *
    * @example
    * ```typescript
-   * // Insert
+   * // Inserindo um novo registro (ID gerado automaticamente via Sequence)
    * const newUser = await repo.save({ name: 'Alice' });
    *
-   * // Update
+   * // Atualizando um registro existente
    * const updatedUser = await repo.save({ id: 1, name: 'Alice Updated' });
    * ```
    *
@@ -360,6 +361,7 @@ export class Repository<T> {
    *
    * @example
    * ```typescript
+   * const total = await repo.count();
    * const activeCount = await repo.count({ active: true });
    * ```
    */

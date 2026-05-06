@@ -118,6 +118,12 @@ export class FirebirdConnection {
    * ```typescript
    * const rawUsers = await connection.query('SELECT ID, NOME FROM USUARIOS WHERE ATIVO = ?', [1]);
    * ```
+   *
+   * @example
+   * ```typescript
+   * // Usando paginação nativa do Firebird
+   * const users = await connection.query('SELECT FIRST 10 SKIP 0 * FROM USUARIOS');
+   * ```
    */
   async query<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
     return new Promise((resolve, reject) => {
