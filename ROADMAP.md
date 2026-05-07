@@ -19,7 +19,7 @@
 ## Convenções do projeto
 
 - **Linguagem:** TypeScript strict (`"strict": true` no tsconfig)
-- **Banco alvo:** Firebird 2.5+ e 3.0+
+- **Banco alvo:** Firebird 2.5+, 3.0+, 4.0+ e 5.0+
 - **Driver base:** `node-firebird` (já no package.json)
 - **Testes:** Jest — arquivos em `src/__tests__/`
 - **Estilo:** sem `any` em tipos públicos, genéricos explícitos
@@ -243,7 +243,7 @@ Exemplo:
 # docker-compose.yml
 services:
   firebird:
-    image: jacobalberty/firebird:3.0
+    image: jacobalberty/firebird:5v
     environment:
       ISC_PASSWORD: masterkey
       FIREBIRD_DATABASE: test.fdb
