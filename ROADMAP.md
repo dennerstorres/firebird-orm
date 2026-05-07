@@ -383,7 +383,7 @@ V1 → V2 → V3 → V4              (features — após Q1)
 | A4 | Mensagens de erro acionáveis | [x] |
 | Q1 | Testes de integração com Docker | [x] |
 | Q2 | GitHub Actions CI | [x] |
-| Q3 | CONTRIBUTING.md | [ ] |
+| Q3 | CONTRIBUTING.md | [~] |
 | Q4 | Changelog e versionamento | [ ] |
 | V1 | Query Builder fluente | [ ] |
 | V2 | Stored Procedures | [ ] |
