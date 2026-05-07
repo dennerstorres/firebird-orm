@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run unit tests
+        run: npm test -- --testPathIgnorePatterns=integration
+
+      - name: Start Firebird
+        run: docker compose up -d
+
+      - name: Wait for Firebird
+        run: |
+          echo "Waiting for Firebird to be ready..."
+          # Firebird can take a few seconds to initialize the database file
+          for i in {1..30}; do
+            if nc -z localhost 3050; then
+              echo "Firebird port is open!"
+              # Give it a few more seconds for the engine to be fully ready
+              sleep 5
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Firebird port did not open in time"
+          exit 1
+
+      - name: Run integration tests
+        run: npm test -- src/__tests__/integration
