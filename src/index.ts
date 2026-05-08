@@ -20,3 +20,5 @@ export type {
 } from './types';
 export { Repository } from './repository';
 export { FluentQueryBuilder } from './fluent-query-builder';
+export { ProcedureBuilder } from './procedure';
+export type { ProcedureType } from './procedure';

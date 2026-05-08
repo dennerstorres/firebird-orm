@@ -2,6 +2,7 @@ import * as Firebird from 'node-firebird';
 import { FirebirdConnectionOptions } from './types';
 import { Repository } from './repository';
 import { FluentQueryBuilder } from './fluent-query-builder';
+import { ProcedureBuilder, ProcedureType } from './procedure';
 
 /**
  * Classe principal para gerenciar a conexão com o banco de dados Firebird.
@@ -120,6 +121,40 @@ export class FirebirdConnection {
         });
       });
     });
+  }
+
+  /**
+   * Executa uma Stored Procedure no Firebird.
+   *
+   * @template T - Tipo esperado para os objetos retornados (linhas do SELECT ou valores do EXECUTE).
+   * @param name - Nome da procedure.
+   * @param params - Parâmetros de entrada da procedure.
+   * @param type - Tipo da procedure (`executable` por padrão).
+   * @returns Uma Promise que resolve nos resultados da procedure.
+   *
+   * @example
+   * ```typescript
+   * // Procedure executável (ação ou retorno único)
+   * const result = await connection.callProcedure('SP_ATUALIZA_ESTOQUE', [prodId, 10]);
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // Procedure selecionável (retorna múltiplas linhas)
+   * const logs = await connection.callProcedure('SP_BUSCAR_LOGS', ['2023-01-01'], 'selectable');
+   * ```
+   *
+   * @remarks
+   * **Firebird quirk:** Procedures `selectable` devem ser chamadas com `SELECT * FROM`,
+   * enquanto procedures `executable` usam `EXECUTE PROCEDURE`.
+   */
+  async callProcedure<T = unknown>(
+    name: string,
+    params: unknown[] = [],
+    type: ProcedureType = 'executable'
+  ): Promise<T[]> {
+    const { sql, params: procedureParams } = ProcedureBuilder.build(name, params, type);
+    return this.query<T>(sql, procedureParams);
   }
 
   /**
