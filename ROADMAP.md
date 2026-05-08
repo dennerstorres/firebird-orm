@@ -386,6 +386,6 @@ V1 → V2 → V3 → V4              (features — após Q1)
 | Q3 | CONTRIBUTING.md | [x] |
 | Q4 | Changelog e versionamento | [x] |
 | V1 | Query Builder fluente | [x] |
-| V2 | Stored Procedures | [~] |
+| V2 | Stored Procedures | [x] |
 | V3 | Suporte a BLOB | [ ] |
 | V4 | Migrations CLI | [ ] |
