@@ -19,3 +19,4 @@ export type {
   ColumnMetadata,
 } from './types';
 export { Repository } from './repository';
+export { FluentQueryBuilder } from './fluent-query-builder';
