@@ -1,6 +1,7 @@
 import * as Firebird from 'node-firebird';
 import { FirebirdConnectionOptions } from './types';
 import { Repository } from './repository';
+import { FluentQueryBuilder } from './fluent-query-builder';
 
 /**
  * Classe principal para gerenciar a conexão com o banco de dados Firebird.
@@ -31,6 +32,22 @@ export class FirebirdConnection {
   constructor(options: FirebirdConnectionOptions) {
     this.options = options;
     this.pool = Firebird.pool(options.poolSize || 5, options);
+  }
+
+  /**
+   * Cria uma nova instância do FluentQueryBuilder para a entidade especificada.
+   *
+   * @template T - Tipo da entidade.
+   * @param EntityClass - Classe da entidade que possui o decorator `@Entity`.
+   * @returns Uma nova instância de FluentQueryBuilder.
+   *
+   * @example
+   * ```typescript
+   * const qb = connection.createQueryBuilder(User);
+   * ```
+   */
+  createQueryBuilder<T>(EntityClass: new () => T): FluentQueryBuilder<T> {
+    return new FluentQueryBuilder<T>(this, EntityClass);
   }
 
   /**
