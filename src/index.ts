@@ -17,6 +17,8 @@ export type {
   FirebirdConnectionOptions,
   FindOptions,
   ColumnMetadata,
+  Migration,
+  MigrationOptions,
 } from './types';
 export { Repository } from './repository';
 export { resolveBlob } from './blob';
