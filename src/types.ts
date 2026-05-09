@@ -1,3 +1,5 @@
+import { FirebirdConnection } from './connection';
+
 /**
  * Opções de conexão com o banco de dados Firebird.
  *
@@ -174,4 +176,53 @@ export class NoPrimaryKeyError extends FirebirdOrmError {
     );
     this.name = 'NoPrimaryKeyError';
   }
+}
+
+/**
+ * Interface que define uma migration do banco de dados.
+ *
+ * @example
+ * ```typescript
+ * export class CreateUsers1625097600000 implements Migration {
+ *   name = 'CreateUsers1625097600000';
+ *   async up(connection: FirebirdConnection): Promise<void> {
+ *     await connection.query('CREATE TABLE USERS (ID INTEGER PRIMARY KEY, NAME VARCHAR(100))');
+ *   }
+ *   async down(connection: FirebirdConnection): Promise<void> {
+ *     await connection.query('DROP TABLE USERS');
+ *   }
+ * }
+ * ```
+ */
+export interface Migration {
+  /** Nome identificador da migration. */
+  name: string;
+  /**
+   * Função para aplicar as mudanças no banco de dados.
+   * @param connection - Instância da conexão para executar queries.
+   */
+  up(connection: FirebirdConnection): Promise<void>;
+  /**
+   * Função para reverter as mudanças no banco de dados.
+   * @param connection - Instância da conexão para executar queries.
+   */
+  down(connection: FirebirdConnection): Promise<void>;
+}
+
+/**
+ * Opções para configuração de migrations.
+ *
+ * @example
+ * ```typescript
+ * const options: MigrationOptions = {
+ *   migrationsDir: './src/migrations',
+ *   migrationsTable: 'MIGRATIONS_HISTORY'
+ * };
+ * ```
+ */
+export interface MigrationOptions {
+  /** Diretório onde os arquivos de migration estão localizados. */
+  migrationsDir: string;
+  /** Nome da tabela que armazena o histórico de migrations (padrão: MIGRATIONS). */
+  migrationsTable?: string;
 }
