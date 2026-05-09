@@ -19,6 +19,7 @@ export type {
   ColumnMetadata,
 } from './types';
 export { Repository } from './repository';
+export { resolveBlob } from './blob';
 export { FluentQueryBuilder } from './fluent-query-builder';
 export { ProcedureBuilder } from './procedure';
 export type { ProcedureType } from './procedure';
