@@ -387,5 +387,5 @@ V1 → V2 → V3 → V4              (features — após Q1)
 | Q4 | Changelog e versionamento | [x] |
 | V1 | Query Builder fluente | [x] |
 | V2 | Stored Procedures | [x] |
-| V3 | Suporte a BLOB | [ ] |
+| V3 | Suporte a BLOB | [~] |
 | V4 | Migrations CLI | [ ] |

@@ -2,6 +2,7 @@ import * as Firebird from 'node-firebird';
 import { QueryBuilder } from './query-builder';
 import { getTableName, getColumnMetadata, getPrimaryColumn } from './decorators';
 import { FindOptions, EntityNotFoundError, ColumnMetadata } from './types';
+import { resolveBlob } from './blob';
 
 /**
  * Repositório genérico para realizar operações CRUD (Create, Read, Update, Delete)
@@ -96,16 +97,22 @@ export class Repository<T> {
   /**
    * Converte uma linha bruta retornada pelo driver para uma instância da classe da entidade,
    * mapeando as colunas em UPPERCASE para as propriedades da classe.
+   * Resolve automaticamente campos BLOB.
    *
    * @param row - Objeto retornado pelo driver node-firebird.
    * @returns Uma nova instância da entidade preenchida com os dados do banco.
    */
-  private mapToEntity(row: any): T {
+  private async mapToEntity(row: any): Promise<T> {
     const entity = new this.EntityClass();
     const columns = getColumnMetadata(this.EntityClass);
 
     for (const col of columns) {
-      const dbValue = row[col.columnName.toUpperCase()];
+      let dbValue = row[col.columnName.toUpperCase()];
+
+      if (typeof dbValue === 'function') {
+        dbValue = await resolveBlob(dbValue);
+      }
+
       if (dbValue !== undefined) {
         (entity as any)[col.propertyKey] = dbValue;
       }
@@ -189,9 +196,10 @@ export class Repository<T> {
       this.pool.get((err: Error, db: any) => {
         if (err) return reject(err);
         this.queryAsync(db, sql, params)
-          .then(rows => {
+          .then(async rows => {
+            const entities = await Promise.all(rows.map(row => this.mapToEntity(row)));
             db.detach();
-            resolve(rows.map(row => this.mapToEntity(row)));
+            resolve(entities);
           })
           .catch(err => {
             db.detach();
@@ -296,7 +304,8 @@ export class Repository<T> {
 
       const selectSql = `SELECT * FROM ${tableName} WHERE ${pk.columnName.toUpperCase()} = ?`;
       const rows = await this.queryAsync(db, selectSql, [generatedId]);
-      return this.mapToEntity(rows[0]);
+      // Note: No explicit db.detach() here because it's handled by executeInTransaction
+      return await this.mapToEntity(rows[0]);
     });
   }
 
