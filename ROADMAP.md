@@ -388,4 +388,4 @@ V1 → V2 → V3 → V4              (features — após Q1)
 | V1 | Query Builder fluente | [x] |
 | V2 | Stored Procedures | [x] |
 | V3 | Suporte a BLOB | [x] |
-| V4 | Migrations CLI | [~] |
+| V4 | Migrations CLI | [x] |
