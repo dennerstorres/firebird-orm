@@ -1,15 +1,24 @@
 {
   "name": "firebird-orm",
-  "version": "0.1.2",
+  "version": "1.0.0",
   "description": "Um ORM elegante e tipado para Firebird",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
   "bin": {
     "firebird-orm": "bin/firebird-orm.js"
   },
   "scripts": {
     "build": "tsc",
     "test": "jest",
+    "test:unit": "jest --testPathIgnorePatterns /node_modules/ /__tests__/integration/",
+    "test:integration": "jest --runInBand src/__tests__/integration",
     "prepare": "husky && npm run build"
   },
   "keywords": [

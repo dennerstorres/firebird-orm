@@ -40,4 +40,7 @@ temp/
 
 # Arquivos de pacote
 *.tgz
-*.zip 
+*.zip
+
+# Binários locais (fbclient.dll baixado para debug de integração)
+.fbclient/ 

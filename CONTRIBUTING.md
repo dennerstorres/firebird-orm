@@ -71,7 +71,7 @@ CI no GitHub Actions roda **as duas suítes em todo PR** (`.github/workflows/ci.
 - **Maiúsculas:** nomes de tabela/coluna enviados em MAIÚSCULO.
 - **Paginação:** `FIRST`/`SKIP` (nunca `LIMIT`/`OFFSET`).
 - **IDs:** `SELECT NEXT VALUE FOR <sequence> FROM RDB$DATABASE`.
-- **Inserção:** o ORM não usa `INSERT ... RETURNING` para preencher a entidade (ver histórico em `CHANGELOG.md` 0.1.3 — isso quebra o driver com BLOB). Construímos a entidade de volta a partir dos valores inseridos.
+- **Inserção:** o ORM não usa `INSERT ... RETURNING` para preencher a entidade (ver histórico em `CHANGELOG.md` 1.0.0 — isso quebra o driver com BLOB). Construímos a entidade de volta a partir dos valores inseridos.
 
 ---
 

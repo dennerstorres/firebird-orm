@@ -1,7 +1,7 @@
 import { createConnection, FirebirdConnection } from '../../connection';
 import { Repository } from '../../repository';
 import { Entity, PrimaryGeneratedColumn, Column } from '../../decorators';
-import { FirebirdConnectionOptions } from '../../types';
+import { getTestConnectionOptions } from './test-connection';
 
 @Entity('TEST_BLOBS')
 class TestBlob {
@@ -18,14 +18,7 @@ class TestBlob {
 describe('BLOB Support (Integration)', () => {
   let connection: FirebirdConnection;
   let repo: Repository<TestBlob>;
-  const options: FirebirdConnectionOptions = {
-    host: 'localhost',
-    port: 3050,
-    database: 'test.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    poolSize: 5
-  };
+  const options = getTestConnectionOptions();
 
   let isAvailable = false;
 

@@ -1,5 +1,7 @@
 import { Repository } from '../repository';
-import { Entity, PrimaryGeneratedColumn, Column } from '../decorators';
+import { Entity, PrimaryGeneratedColumn, PrimaryColumn, Column } from '../decorators';
+import { EntityNotFoundError } from '../types';
+import { EventEmitter } from 'events';
 
 @Entity('USERS')
 class User {
@@ -153,6 +155,152 @@ describe('Repository', () => {
         [1],
         expect.any(Function)
       );
+    });
+  });
+
+  describe('branch coverage', () => {
+    it('find with orderBy should append ORDER BY clause', async () => {
+      dbMock.query.mockImplementation((sql: any, params: any, cb: any) =>
+        cb(null, [{ ID: 2, NAME: 'B', IS_ACTIVE: 1 }, { ID: 1, NAME: 'A', IS_ACTIVE: 1 }])
+      );
+
+      const results = await repo.find({ orderBy: { name: 'ASC' } });
+
+      expect(dbMock.query).toHaveBeenCalledWith(
+        expect.stringContaining('ORDER BY NAME ASC'),
+        [],
+        expect.any(Function)
+      );
+      expect(results).toHaveLength(2);
+    });
+
+    it('find with select should project only selected columns', async () => {
+      dbMock.query.mockImplementation((sql: any, params: any, cb: any) => cb(null, [{ NAME: 'Only' }]));
+
+      const results = await repo.find({ select: ['name'] });
+
+      expect(dbMock.query).toHaveBeenCalledWith(
+        expect.stringMatching(/SELECT NAME FROM USERS/),
+        [],
+        expect.any(Function)
+      );
+      expect(results[0].name).toBe('Only');
+      // IS_ACTIVE not selected, so it stays undefined on the entity instance
+      expect(results[0].isActive).toBeUndefined();
+    });
+
+    it('findOneOrFail throws EntityNotFoundError when not found', async () => {
+      dbMock.query.mockImplementation((sql: any, params: any, cb: any) => cb(null, []));
+
+      await expect(repo.findOneOrFail(999)).rejects.toThrow(EntityNotFoundError);
+      await expect(repo.findOneOrFail(999)).rejects.toThrow(/User.*999/);
+    });
+
+    it('update with only the PK in payload returns early (no SQL emitted)', async () => {
+      // Calling update with just the PK should be a no-op (don't update PK to itself)
+      const callCountBefore = transactionMock.query.mock.calls.length;
+      await repo.update(1, { id: 1 });
+      const callCountAfter = transactionMock.query.mock.calls.length;
+      expect(callCountAfter).toBe(callCountBefore);
+    });
+
+    it('count with where clause applies the filter', async () => {
+      dbMock.query.mockImplementation((sql: any, params: any, cb: any) => cb(null, [{ COUNT: 3 }]));
+
+      const total = await repo.count({ isActive: true });
+
+      expect(dbMock.query).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT COUNT(*) FROM USERS WHERE IS_ACTIVE = ?'),
+        [true],
+        expect.any(Function)
+      );
+      expect(total).toBe(3);
+    });
+
+    it('transaction rolls back when inner fn throws', async () => {
+      // Build a transaction mock whose query will throw to simulate a DB error mid-transaction.
+      const rollbackMock = jest.fn((cb: any) => cb && cb());
+      const failingTx: any = {
+        query: jest.fn((_sql: any, _params: any, cb: any) => cb(new Error('simulated DB error'))),
+        commit: jest.fn(),
+        rollback: rollbackMock,
+      };
+      dbMock.transaction = jest.fn((iso: any, cb: any) => cb(null, failingTx));
+
+      await expect(repo.delete(123)).rejects.toThrow('simulated DB error');
+      // Inner fn threw, so transaction.rollback must be called and transaction.commit must NOT.
+      expect(rollbackMock).toHaveBeenCalledTimes(1);
+      expect(failingTx.commit).not.toHaveBeenCalled();
+    });
+
+    it('save with non-generated PK (provided ID) takes the update path', async () => {
+      // When id is provided, save() goes through update() + findOneOrFail(), not insert/sequence.
+      @Entity('NO_GEN')
+      class NoGen {
+        @PrimaryColumn()
+        id!: number;
+        @Column() name!: string;
+      }
+      const localRepo = new Repository<NoGen>(poolMock, NoGen);
+
+      // update() runs inside executeInTransaction → transaction.query
+      transactionMock.query.mockImplementationOnce((sql: any, _p: any, cb: any) => {
+        expect(sql).toContain('UPDATE NO_GEN');
+        cb(null, []);
+      });
+      // findOneOrFail() → find() → db.query
+      dbMock.query.mockImplementationOnce((sql: any, _p: any, cb: any) => {
+        expect(sql).toContain('FROM NO_GEN');
+        cb(null, [{ ID: 42, NAME: 'Manual' }]);
+      });
+
+      const result = await localRepo.save({ id: 42, name: 'Manual' });
+      expect(result.id).toBe(42);
+      expect(result.name).toBe('Manual');
+      // No sequence call should ever be made.
+      const allSql = transactionMock.query.mock.calls.map((c: any[]) => c[0]).join(' ');
+      expect(allSql).not.toContain('NEXT VALUE FOR');
+    });
+
+    it('mapToEntity resolves BLOB values that come back as functions', async () => {
+      // node-firebird returns BLOBs as a function that calls cb(err, name, EventEmitter).
+      const blobFn = jest.fn().mockImplementation((cb: any) => {
+        const ee = new EventEmitter();
+        cb(null, 'blob', ee);
+        setImmediate(() => {
+          ee.emit('data', Buffer.from('BLOBPAYLOAD'));
+          ee.emit('end');
+        });
+      });
+
+      dbMock.query.mockImplementation((sql: any, params: any, cb: any) =>
+        cb(null, [{ ID: 1, NAME: 'B', DATA_BLOB: blobFn }])
+      );
+
+      @Entity('BLOB_ENT')
+      class BlobEnt {
+        @PrimaryGeneratedColumn()
+        id!: number;
+        @Column() name!: string;
+        @Column({ name: 'DATA_BLOB' })
+        data!: Buffer;
+      }
+      const blobRepo = new Repository<BlobEnt>(poolMock, BlobEnt);
+
+      const results = await blobRepo.find();
+      expect(blobFn).toHaveBeenCalled();
+      expect(results[0].data).toBeInstanceOf(Buffer);
+      expect(results[0].data.toString()).toBe('BLOBPAYLOAD');
+    });
+
+    it('findOneOrFail returns the entity when found', async () => {
+      dbMock.query.mockImplementation((sql: any, params: any, cb: any) =>
+        cb(null, [{ ID: 5, NAME: 'Found', IS_ACTIVE: 1 }])
+      );
+
+      const entity = await repo.findOneOrFail(5);
+      expect(entity.id).toBe(5);
+      expect(entity.name).toBe('Found');
     });
   });
 });

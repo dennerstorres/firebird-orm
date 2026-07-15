@@ -1,16 +1,9 @@
 import { createConnection, FirebirdConnection } from '../../connection';
-import { FirebirdConnectionOptions } from '../../types';
+import { getTestConnectionOptions } from './test-connection';
 
 describe('Procedure (Integration)', () => {
   let connection: FirebirdConnection;
-  const options: FirebirdConnectionOptions = {
-    host: 'localhost',
-    port: 3050,
-    database: 'test.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    poolSize: 5
-  };
+  const options = getTestConnectionOptions();
 
   let skip = false;
 

@@ -154,7 +154,13 @@ export class FirebirdConnection {
     type: ProcedureType = 'executable'
   ): Promise<T[]> {
     const { sql, params: procedureParams } = ProcedureBuilder.build(name, params, type);
-    return this.query<T>(sql, procedureParams);
+    const result = await this.query<T>(sql, procedureParams);
+    // node-firebird quirk: EXECUTE PROCEDURE returns a bare row object instead of an array.
+    // Normalize so callers always receive Array<row>.
+    if (!Array.isArray(result)) {
+      return result ? [result] : [];
+    }
+    return result;
   }
 
   /**

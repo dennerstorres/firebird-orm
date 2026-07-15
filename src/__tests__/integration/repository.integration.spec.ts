@@ -1,7 +1,7 @@
 import { createConnection, FirebirdConnection } from '../../connection';
 import { Repository } from '../../repository';
 import { Entity, PrimaryGeneratedColumn, Column } from '../../decorators';
-import { FirebirdConnectionOptions } from '../../types';
+import { getTestConnectionOptions } from './test-connection';
 
 @Entity('TEST_USERS')
 class TestUser {
@@ -11,21 +11,14 @@ class TestUser {
   @Column()
   name!: string;
 
-  @Column({ name: 'IS_ACTIVE' })
+  @Column({ name: 'IS_ACTIVE', type: 'boolean' })
   isActive!: boolean;
 }
 
 describe('Repository (Integration)', () => {
   let connection: FirebirdConnection;
   let repo: Repository<TestUser>;
-  const options: FirebirdConnectionOptions = {
-    host: 'localhost',
-    port: 3050,
-    database: 'test.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    poolSize: 5
-  };
+  const options = getTestConnectionOptions();
 
   let isAvailable = false;
 

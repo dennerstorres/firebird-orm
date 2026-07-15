@@ -113,7 +113,13 @@ export class Repository<T> {
         dbValue = await resolveBlob(dbValue);
       }
 
-      if (dbValue !== undefined) {
+      if (dbValue !== undefined && dbValue !== null) {
+        // Coerce according to declared column type (e.g. SMALLINT 0/1 → boolean).
+        if (col.type === 'boolean') {
+          dbValue = dbValue === true || dbValue === 1 || dbValue === '1' || dbValue === 'T';
+        } else if (col.type === 'string') {
+          dbValue = String(dbValue);
+        }
         (entity as any)[col.propertyKey] = dbValue;
       }
     }
@@ -181,6 +187,10 @@ export class Repository<T> {
           orderBy[col.columnName.toUpperCase()] = dir as 'ASC' | 'DESC';
         }
       }
+    } else {
+      // Default: ORDER BY primary key ASC so pagination (FIRST/SKIP) is deterministic.
+      const pk = getPrimaryColumn(this.EntityClass);
+      orderBy = { [pk.columnName.toUpperCase()]: 'ASC' };
     }
 
     const { sql, params } = this.qb.buildSelect(
@@ -282,30 +292,38 @@ export class Repository<T> {
 
     return this.executeInTransaction(async (db) => {
       const tableName = getTableName(this.EntityClass);
-      let entityToInsert = { ...entity };
+      const entityToInsert: Record<string, unknown> = { ...(entity as Record<string, unknown>) };
 
       if (pk.generated) {
         const seqSql = `SELECT NEXT VALUE FOR ${pk.sequenceName} FROM RDB$DATABASE`;
         const seqResult = await this.queryAsync(db, seqSql);
         const nextId = seqResult[0][Object.keys(seqResult[0])[0]];
-        (entityToInsert as any)[pk.propertyKey] = nextId;
+        entityToInsert[pk.propertyKey as string] = nextId;
       }
 
-      const columnsMap = this.mapToColumns(entityToInsert);
+      const columnsMap = this.mapToColumns(entityToInsert as Partial<T>);
       const { sql, params } = this.qb.buildInsert(
         tableName,
         Object.keys(columnsMap),
-        Object.values(columnsMap),
-        pk.columnName
+        Object.values(columnsMap)
+        // No RETURNING: node-firebird returns undefined for INSERT, and a follow-up
+        // SELECT * would re-describe BLOB columns and crash in some driver builds.
+        // We have all the values we inserted (including generated PK), so we just
+        // build the entity directly.
       );
 
-      const insertResult = await this.queryAsync(db, sql, params);
-      const generatedId = insertResult[0][pk.columnName.toUpperCase()];
+      await this.queryAsync(db, sql, params);
 
-      const selectSql = `SELECT * FROM ${tableName} WHERE ${pk.columnName.toUpperCase()} = ?`;
-      const rows = await this.queryAsync(db, selectSql, [generatedId]);
-      // Note: No explicit db.detach() here because it's handled by executeInTransaction
-      return await this.mapToEntity(rows[0]);
+      // Construct entity instance from the inputs we just persisted. This avoids a
+      // SELECT roundtrip and, more importantly, avoids the BLOB describe crash on
+      // tables that contain BLOB columns.
+      const columns = getColumnMetadata(this.EntityClass);
+      const instance = new this.EntityClass();
+      for (const col of columns) {
+        const key = col.propertyKey as string;
+        (instance as any)[key] = entityToInsert[key];
+      }
+      return instance;
     });
   }
 

@@ -42,6 +42,25 @@ export interface FirebirdConnectionOptions {
    * espera que as chaves retornadas pelo driver estejam em MAIÚSCULO.
    */
   lowercase_keys?: boolean;
+  /**
+   * Plugin de autenticação a ser utilizado.
+   * Valores aceitos: `'Legacy_Auth'`, `'Srp'`, `'Srp256'`.
+   *
+   * @remarks
+   * Por padrão o driver usa a ordem `[Srp, Legacy_Auth]`. Em servidores onde
+   * o usuário só tem entrada para `Legacy_Auth` (ex.: usuários migrados de Firebird 2.5
+   * sem SRP), informe `'Legacy_Auth'` para evitar o erro
+   * "Install incomplete... CREATE USER".
+   */
+  pluginName?: 'Legacy_Auth' | 'Srp' | 'Srp256';
+  /**
+   * Habilita ou desabilita criptografia do canal (wire protocol).
+   *
+   * @remarks
+   * Por padrão o driver usa `Disabled`. Para produção com dados sensíveis,
+   * prefira `'Enabled'` quando o servidor estiver configurado adequadamente.
+   */
+  wireCrypt?: boolean;
 }
 
 /**
@@ -112,6 +131,8 @@ export interface ColumnMetadata {
   generated?: boolean;
   /** Nome da sequence usada para gerar o ID (relevante apenas se `generated` for true). */
   sequenceName?: string;
+  /** Tipo da coluna para fins de coerção na leitura (mapeamento para o tipo TS). */
+  type?: 'boolean' | 'string' | 'number' | 'bigint' | 'Date' | 'Buffer';
 }
 
 /**

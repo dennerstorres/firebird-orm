@@ -19,6 +19,12 @@ export interface ColumnOptions {
    * Define se a coluna permite valores nulos (NULL).
    */
   nullable?: boolean;
+  /**
+   * Tipo da coluna para fins de coerção na leitura (mapeamento para o tipo TS).
+   * Útil para SMALLINT (0/1) que o Firebird devolve como number mas a entidade
+   * declara como boolean.
+   */
+  type?: 'boolean' | 'string' | 'number' | 'bigint' | 'Date' | 'Buffer';
 }
 
 /**
@@ -81,6 +87,7 @@ export function Column(options: ColumnOptions = {}): PropertyDecorator {
       propertyKey,
       columnName: (options.name || propertyKey.toString()).toUpperCase(),
       nullable: options.nullable,
+      type: options.type,
       primary: false,
       generated: false
     });

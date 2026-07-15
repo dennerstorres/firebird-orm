@@ -1,7 +1,7 @@
 import { createConnection, FirebirdConnection } from '../../connection';
 import { Repository } from '../../repository';
 import { Entity, PrimaryGeneratedColumn, Column } from '../../decorators';
-import { FirebirdConnectionOptions } from '../../types';
+import { getTestConnectionOptions } from './test-connection';
 
 @Entity('TEST_TRANS')
 class TestTrans {
@@ -15,14 +15,7 @@ class TestTrans {
 describe('Transactions (Integration)', () => {
   let connection: FirebirdConnection;
   let repo: Repository<TestTrans>;
-  const options: FirebirdConnectionOptions = {
-    host: 'localhost',
-    port: 3050,
-    database: 'test.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    poolSize: 5
-  };
+  const options = getTestConnectionOptions();
 
   let isAvailable = false;
 

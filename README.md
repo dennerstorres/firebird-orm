@@ -339,7 +339,7 @@ CI no GitHub Actions roda as duas suítes em todo PR (`.github/workflows/ci.yml`
 - Histórico detalhado em [`CHANGELOG.md`](./CHANGELOG.md)
 - Commits seguem [Conventional Commits](https://www.conventionalcommits.org/) (enforçado por `husky` + `commitlint`)
 
-A versão atual é **0.1.3** — API estável para o subset de recursos implementados; sem breaking changes planejadas.
+A versão atual é **1.0.0** — API estável. Sem breaking changes planejadas até a próxima minor.
 
 ---
 
