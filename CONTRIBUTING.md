@@ -1,15 +1,21 @@
 # Guia de Contribuição
 
-Obrigado por seu interesse em contribuir para o `firebird-orm`! Este documento fornece diretrizes para humanos e agentes de IA sobre como configurar o ambiente local e contribuir com o projeto.
+Obrigado por seu interesse em contribuir com o `firebird-orm`. Este guia vale tanto para contribuidores humanos quanto para **agentes de IA** que estejam propondo patches automatizados.
 
-## Setup Local
+---
+
+## Setup local
 
 ### Pré-requisitos
-- Node.js (v20 recomendado)
-- npm
-- Docker e Docker Compose (para testes de integração)
+
+| Ferramenta | Versão recomendada |
+|---|---|
+| Node.js | 20.x |
+| npm | 10.x |
+| Docker / Docker Compose | para rodar a suíte de integração |
 
 ### Instalação
+
 ```bash
 git clone https://github.com/dennerstorres/firebird-orm.git
 cd firebird-orm
@@ -17,60 +23,127 @@ npm install
 ```
 
 ### Build
-Para compilar o projeto TypeScript:
+
 ```bash
 npm run build
 ```
 
+Gera `dist/` + `.d.ts`. A CLI em `bin/firebird-orm.js` só funciona depois do build (`npm run prepare` chama `husky` + build automaticamente em `npm install`).
+
 ### Testes
-O projeto utiliza Jest para testes.
 
-- **Testes unitários:**
-  ```bash
-  npm test -- --testPathIgnorePatterns=integration
-  ```
-- **Testes de integração:**
-  Certifique-se de que o Docker está rodando e inicie o container do Firebird:
-  ```bash
-  docker compose up -d
-  npm test -- src/__tests__/integration
-  ```
+Suítes Jest separadas por `--testPathIgnorePatterns`:
 
-## Convenções de Código
+```bash
+# Unitários (sem Firebird)
+npm test -- --testPathIgnorePatterns=integration
 
-### Linguagem e Estilo
-- **TypeScript Strict:** O projeto usa `"strict": true`. Não use `any` em tipos públicos.
-- **JSDoc:** Todos os métodos, decorators e tipos públicos devem incluir JSDoc com `@example`, `@param`, `@returns` e `@throws`.
-- **Nomes:** Use camelCase para propriedades de classe e UPPERCASE para nomes de tabelas e colunas no banco de dados.
+# Integração (precisa de Firebird rodando)
+docker compose up -d
+npm test -- src/__tests__/integration
+```
 
-### SQL e Firebird
-- **Placeholders:** SEMPRE use `?` para parâmetros de query. Nunca concatene strings.
-- **Maiúsculas:** Nomes de tabelas e colunas devem ser enviados em MAIÚSCULO.
-- **Paginação:** Use `FIRST` e `SKIP`, nunca `LIMIT` e `OFFSET`.
-- **IDs:** Use sequences via `SELECT NEXT VALUE FOR <sequence> FROM RDB$DATABASE`.
-- **Inserção:** Use `RETURNING <pk_column>` em comandos `INSERT` para obter o ID gerado.
+Os 5 specs de integração (`connection`, `repository`, `transaction`, `blob`, `procedure` + `index`) leem do ambiente:
 
-## Fluxo de Contribuição
+```
+FB_HOST      (default: localhost)
+FB_PORT      (default: 3050)
+FB_DATABASE  (default: test.fdb)
+FB_USER      (default: SYSDBA)
+FB_PASSWORD  (default: masterkey)
+FB_PLUGIN_NAME (opcional — ex: 'Legacy_Auth' para Firebird 5 com usuários legados)
+```
 
-### Criando uma Issue
-Antes de começar a trabalhar, verifique se já existe uma issue ou task no `ROADMAP.md` correspondente ao que você deseja fazer. Se não, abra uma nova issue descrevendo a melhoria ou o bug.
-
-### Criando um Pull Request
-1. **Branch:** Crie um branch a partir do `master` seguindo o padrão `task/<ID>` (ex: `task/F1`).
-2. **Task Única:** Cada PR deve implementar apenas UMA task do ROADMAP.md.
-3. **Commit:** Siga o padrão de Conventional Commits (ex: `feat(repository): add count() method`).
-4. **Descrição:** Use o template de PR especificado no `ROADMAP.md`.
-
-## Quirks do Firebird
-
-Todo contribuidor deve estar ciente das seguintes particularidades do Firebird:
-
-- **Booleanos:** O Firebird 2.5 não possui tipo `BOOLEAN` nativo. Use `SMALLINT` (0 para false, 1 para true).
-- **Strings Vazias:** O Firebird trata strings vazias (`''`) como `NULL`.
-- **Datas:** Use os tipos `DATE`, `TIME` ou `TIMESTAMP`. Evite `VARCHAR`.
-- **Transações:** Todas as operações devem ser executadas dentro de uma transação.
-- **Case Sensitivity:** Nomes de objetos sem aspas são convertidos para MAIÚSCULO internamente.
+CI no GitHub Actions roda **as duas suítes em todo PR** (`.github/workflows/ci.yml`).
 
 ---
 
-Este projeto segue um roteiro definido no arquivo `ROADMAP.md`. Consulte-o para ver as próximas prioridades.
+## Convenções de código
+
+- **TypeScript strict** — `"strict": true`. Não use `any` em superfície pública (`src/index.ts`).
+- **JSDoc** — todo método, decorator e tipo público deve trazer `@example`, `@param`, `@returns`, `@throws`. Em pontos onde o Firebird se comporta diferente de outros bancos, adicione `@remarks` com **"Firebird quirk:"**.
+- **Nomes em camelCase** para propriedades da classe e **UPPERCASE** para nomes de tabelas e colunas no banco — o ORM normaliza automaticamente, mas mantenha o código coerente.
+- **Sem espaços/placeholders extras** no package: o que vai pro npm está em `package.json > "files"`.
+
+### SQL
+
+- **Placeholders:** SEMPRE `?`. Nunca concatenar valores na string SQL.
+- **Maiúsculas:** nomes de tabela/coluna enviados em MAIÚSCULO.
+- **Paginação:** `FIRST`/`SKIP` (nunca `LIMIT`/`OFFSET`).
+- **IDs:** `SELECT NEXT VALUE FOR <sequence> FROM RDB$DATABASE`.
+- **Inserção:** o ORM não usa `INSERT ... RETURNING` para preencher a entidade (ver histórico em `CHANGELOG.md` 0.1.3 — isso quebra o driver com BLOB). Construímos a entidade de volta a partir dos valores inseridos.
+
+---
+
+## Fluxo de contribuição
+
+### Abrindo uma issue
+
+Antes de mandar PR, verifique se já existe issue aberta. Se não, abra descrevendo:
+
+1. **O quê** — comportamento atual vs esperado
+2. **Por quê** — caso de uso que motivou
+3. **Como reproduzir** — passos / trecho de código
+
+### Enviando um pull request
+
+1. Crie um branch a partir de `master` com nome descritivo: `fix/update-bug-blob`, `feat/add-cli-flag`, etc.
+2. **Um PR = uma mudança coerente.** Não misture bugfix + feature + refactor.
+3. **Commits em Conventional Commits** (enforçado por `husky` + `commitlint` em `.commitlintrc.json`):
+   ```
+   feat(repository): add fluent association support
+   fix(decorators): upper-case column name when option is provided
+   docs(readme): clarify pagination behavior
+   chore(deps): bump reflect-metadata to 0.2
+   ```
+4. Antes do PR:
+   - `npm run build` sem erros
+   - `npm test` (unit + integração) verde
+5. No PR, preencha: o que foi feito, qual issue resolve (ex.: `Closes #12`), como validar.
+
+---
+
+## Quirks do Firebird (cheat-sheet)
+
+Todo contribuidor — humano ou IA — precisa conhecer:
+
+- **Booleanos:** o Firebird 2.5 não tem `BOOLEAN` nativo. Use `SMALLINT` (0 = false, 1 = true) e declare a coluna com `@Column({ type: 'boolean' })` para o ORM converter na leitura.
+- **Strings vazias:** o Firebird trata `''` como `NULL`. Para campos obrigatórios com texto, guarde `' '` (espaço) ou `'-'`.
+- **Datas:** prefira `DATE`, `TIME` ou `TIMESTAMP`. Evite `VARCHAR` para datas (tira ordenação e comparações).
+- **Transações:** toda escrita abre uma transação (`READ_COMMITTED` por padrão). Não chame `connection.query(...)` à toa fora de `transaction(...)` em produção.
+- **Case:** nomes sem aspas viram **MAIÚSCULO** no banco. O ORM normaliza; mantenha o padrão.
+- **BLOB:** chega como função de stream pelo `node-firebird`. O `Repository` resolve automaticamente no `find/findOne`; raw SQL precisa de `resolveBlob(...)`.
+- **Renomear:** não existe `RENAME TABLE` no Firebird. Migrations com rename criam nova tabela, copiam dados, dropam a antiga.
+
+---
+
+## Estrutura do projeto
+
+```
+src/
+├── connection.ts          # createConnection, FirebirdConnection, pool
+├── decorators.ts          # @Entity, @Column, @PrimaryGeneratedColumn, @PrimaryColumn
+├── repository.ts          # Repository<T> — CRUD genérico
+├── query-builder.ts       # QueryBuilder interno (gera SQL + params)
+├── fluent-query-builder.ts# API encadeável para queries complexas
+├── procedure.ts           # ProcedureBuilder + tipos
+├── blob.ts                # resolveBlob() — converte stream BLOB em Buffer
+├── cli/                   # migration:generate / run / revert
+├── examples/              # exemplos curtos (não vão para o npm)
+└── __tests__/             # jest — unitários e integration/
+```
+
+Para mais contexto (estilo "doc for AI agents"), veja [`llms.txt`](./llms.txt).
+
+---
+
+## Reporter bugs e pedir features
+
+Use o [GitHub Issues](https://github.com/dennerstorres/firebird-orm/issues). Para bugs, inclua:
+
+- Versão do Node, do `firebird-orm` e do Firebird
+- Trecho mínimo reproduzindo
+- Stack trace completa
+- SQL gerado (se a query estiver envolvida) — habilite `DEBUG=firebird-orm` no ambiente
+
+Obrigado por ajudar a tornar o Firebird menos doloroso no Node. 🚒
